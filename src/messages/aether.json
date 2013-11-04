@@ -1,0 +1,104 @@
+[
+  { "type"    : "RequestKey",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "clientEKey" , "type" : "bit256" },
+    { "name" : "serverLKey" , "type" : "bit256" },
+    { "name" : "nonce"      , "type" : "bit192" },
+    "Box( cEK, sLK )[ RequestKeyBoxedData ]",
+    { "name" : "cryptoBox"  , "type" : "bytes"  }
+  ] },
+
+  { "type"    : "RequestKeyBoxedData",
+    "version" : 2 ,
+    "fields" : [
+  ] },
+
+
+  { "type"    : "RequestKeyResponse",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "serverLKey" , "type" : "bit256" },
+    { "name" : "clientEKey" , "type" : "bit256" },
+    { "name" : "nonce"      , "type" : "bit192" },
+    "Box( sLK, cEK )[ RequestKeyResponseBoxedData ]",
+    { "name" : "cryptoBox"  , "type" : "bytes"  }
+  ] },
+
+  { "type"    : "RequestKeyResponseBoxedData",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "serverEKey" , "type" : "bit256" }
+  ] },
+
+
+  { "type"    : "StartSession",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "clientEKey" , "type" : "bit256" },
+    { "name" : "serverEKey" , "type" : "bit256" },
+    { "name" : "nonce"      , "type" : "bit192" },
+    "Box( cEK, sEK )[ StartSessionBoxedData ]",
+    { "name" : "cryptoBox"  , "type" : "bytes"  }
+  ] },
+
+  { "type"    : "StartSessionBoxedData",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "clientLKey" , "type" : "bit256" },
+    { "name" : "nonce"      , "type" : "bit192" },
+    "Box( sEK, cLK )[ StartSessionKeyVouch ]",
+    { "name" : "cryptoBox"  , "type" : "bytes"  }
+  ] },
+
+  { "type"    : "StartSessionKeyVouch",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "clientEKey"   , "type" : "bit256" },
+    { "name" : "connectionId" , "type" : "uInt32" }
+  ] },
+
+
+  { "type"    : "EndSession",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "senderEKey"   , "type" : "bit256" },
+    { "name" : "receiverEKey" , "type" : "bit256" },
+    { "name" : "nonce"        , "type" : "bit192" },
+    "Box( senderEK, receiverEK )[ EndSessionBoxedData ]",
+    { "name" : "cryptoBox"    , "type" : "bytes"  }
+  ] },
+
+  { "type"    : "EndSessionBoxedData",
+    "version" : 2 ,
+    "fields" : [
+    "1 == true, 0 == false, others are reserved",
+    { "name" : "endConnection" , "type" : "uInt8" }
+  ] },
+
+
+  { "type"    : "SessionData",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "senderEKey"   , "type" : "bit256" },
+    { "name" : "receiverEKey" , "type" : "bit256" },
+    { "name" : "nonce"        , "type" : "bit192" },
+    "Box( senderEK, receiverEK )[ bytes ]",
+    { "name" : "cryptoBox"    , "type" : "bytes"  }
+  ] },
+
+
+  { "type"    : "InvalidSession",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "serverLKey" , "type" : "bit256" },
+    { "name" : "clientEKey" , "type" : "bit256" },
+    "Box( sLK, cEK )[ InvalidSessionBoxedData ]" ,
+    { "name" : "cryptoBox"  , "type" : "bytes"  }
+  ] },
+
+  { "type"    : "InvalidSessionBoxedData",
+    "version" : 2 ,
+    "fields" : [
+  ] }
+]
