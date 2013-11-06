@@ -1,6 +1,5 @@
 [
-  "Request new ephermal key from server using the client ephemreal key
-   and the server longerm key.",
+  "Request new ephermal key from server using the client ephemreal key and the server longerm key.",
   { "type"    : "RequestKey",
     "version" : 2 ,
     "fields" : [
@@ -16,8 +15,7 @@
   ] },
 
 
-  "Server responds with server ephermreal key useing client ephermal key
-   and server longterm key.",  
+  "Server responds with server ephermreal key useing client ephermal key and server longterm key.",  
   { "type"    : "RequestKeyResponse",
     "version" : 2 ,
     "fields" : [
@@ -34,8 +32,8 @@
   ] },
 
 
-  "Start a new encrypted session using the the server and client ephermal keys.
-   Client authentacates it's ephermal key and connectionId using it's longterm key.",
+  "Start a new encrypted session using the the server and client ephermal keys.",
+  "Client authentacates it's ephermal key and connectionId using it's longterm key.",
   { "type"    : "StartSession",
     "version" : 2 ,
     "fields" : [
