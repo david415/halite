@@ -1,9 +1,10 @@
 [
+  "Request new ephermal key from server using the client ephemreal key
+   and the server longerm key.",
   { "type"    : "RequestKey",
     "version" : 2 ,
     "fields" : [
     { "name" : "clientEKey" , "type" : "bit256" },
-    { "name" : "serverLKey" , "type" : "bit256" },
     { "name" : "nonce"      , "type" : "bit192" },
     "Box( cEK, sLK )[ RequestKeyBoxedData ]",
     { "name" : "cryptoBox"  , "type" : "bytes"  }
@@ -15,10 +16,11 @@
   ] },
 
 
+  "Server responds with server ephermreal key useing client ephermal key
+   and server longterm key.",  
   { "type"    : "RequestKeyResponse",
     "version" : 2 ,
     "fields" : [
-    { "name" : "serverLKey" , "type" : "bit256" },
     { "name" : "clientEKey" , "type" : "bit256" },
     { "name" : "nonce"      , "type" : "bit192" },
     "Box( sLK, cEK )[ RequestKeyResponseBoxedData ]",
@@ -32,6 +34,8 @@
   ] },
 
 
+  "Start a new encrypted session using the the server and client ephermal keys.
+   Client authentacates it's ephermal key and connectionId using it's longterm key.",
   { "type"    : "StartSession",
     "version" : 2 ,
     "fields" : [
@@ -59,6 +63,7 @@
   ] },
 
 
+  "End a session. If endConnection is 1 ( true ) also end the connection.",
   { "type"    : "EndSession",
     "version" : 2 ,
     "fields" : [
@@ -77,6 +82,7 @@
   ] },
 
 
+  "Send applacation data.",
   { "type"    : "SessionData",
     "version" : 2 ,
     "fields" : [
@@ -88,10 +94,10 @@
   ] },
 
 
+  "Inform the clinet that it's session is invalad.",
   { "type"    : "InvalidSession",
     "version" : 2 ,
     "fields" : [
-    { "name" : "serverLKey" , "type" : "bit256" },
     { "name" : "clientEKey" , "type" : "bit256" },
     "Box( sLK, cEK )[ InvalidSessionBoxedData ]" ,
     { "name" : "cryptoBox"  , "type" : "bytes"  }
