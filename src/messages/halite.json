@@ -47,6 +47,7 @@
   { "type"    : "StartSessionBoxedData",
     "version" : 2 ,
     "fields" : [
+    { "name" : "data"       , "type" : "bytes" },
     { "name" : "clientLKey" , "type" : "bit256" },
     { "name" : "nonce"      , "type" : "bit192" },
     "Box( sEK, cLK )[ StartSessionKeyVouch ]",
