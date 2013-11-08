@@ -14,13 +14,18 @@ function HaliteCore ( fNacl, fAuthKeyPair ) {
   var messages = convexstruct.messages ;
 
   var fEphermalKeyPair ;
+  var fEphermalKeyPairIndex ;
   var fOldEphermalKeyPair ;
+  var fOldEphermalKeyPairIndex ;
   var fSessions ;
   var fInisheating ;
 
-  self.rotateEphermalKey    = rotateEphermalKey ;
-  self.forgetOldEphermalKey = forgetOldEphermalKey ;
-  self.requestSessionKey    = requestSessionKey ;
+  self.rotateEphermalKey         = rotateEphermalKey ;
+  self.forgetOldEphermalKey      = forgetOldEphermalKey ;
+  self.makeRequestKey            = makeRequestKey ;
+  self.processRequestKey         = processRequestKey ;
+  self.processRequestKeyResponce = processRequestKeyResponce ;
+  self.makeStartSession          = makeStartSession ;
 
   init( ) ;
 
@@ -73,8 +78,10 @@ function HaliteCore ( fNacl, fAuthKeyPair ) {
 
 
   function rotateEphermalKey ( ) {
-    fOldEphermalKeyPair = fEphermalKeyPair ;
-    fEphermalKeyPair    = fNacl.crypto_box_keypair( ) ;
+    fOldEphermalKeyPair      = fEphermalKeyPair ;
+    fOldEphermalKeyPairIndex = fEphermalKeyPairIndex ;
+    fEphermalKeyPair         = fNacl.crypto_box_keypair( ) ;
+    fEphermalKeyPairIndex    = fNacl.to_hex( fEphermalKeyPair.boxPk ) ;
   }
 
 
@@ -170,7 +177,7 @@ function HaliteCore ( fNacl, fAuthKeyPair ) {
 
     var sessionIndex = fNacl.to_hex( sesssionKeyPair.boxPk ) ;
 
-    fInisheating[ sessionIndex ] = { 
+    fSessions[ sessionIndex ] = { 
       startTime      : new Date ( ) ,
       acked          : undefined
       serverLongterm : serverLongtermKey , 
@@ -204,6 +211,48 @@ function HaliteCore ( fNacl, fAuthKeyPair ) {
     var startSessionMessage = messages.make_StartSession( START_SESSION_BUILDER ) ;
 
     return startSessionMessage ;
+  }
+
+  
+  function processRequestStartSession ( nonce, startSessionMessage ) {
+
+    var clientEphermalKey = messages.StartSession_read_clientEKey( startSessionMessage, 0 ) ;
+    var serverEphermalKey = messages.StartSession_read_serverEKey( startSessionMessage, 0 ) ;
+    var startNonce        = messages.StartSession_read_nonce( startSessionMessage, 0 ) ;
+    var cryptoBox         = messages.StartSession_read_cryptoBox( startSessionMessage, 0 ) ;
+
+    var sessionKeyPair ;
+    var serverKeyIndex = fNacl.to_hex( serverEphermalKey ) ;
+
+    if ( serverKeyIndex === fEphermalKeyPairIndex )
+      sessionKeyPair = fEphermalKeyPair ;
+
+    else if ( serverKeyIndex === fOldEphermalKeyPairIndex )
+      sessionKeyPair = fOldEphermalKeyPair ;
+
+    else
+      return undefined ;
+
+    var sessionIndex = fNacl.to_hex( clientEphermalKey ) ;
+
+    if ( fSessions[ sessionIndex ] !== undefined )
+      return undefined ;
+
+    var boxKey = fNacl.crypto_box_precompute( clientEphermalKey, sesssionKeyPair.boxSk ) ;
+
+    var boxData = fNacl.crypto_box_open_precomputed( cryptoBox, startNonce, boxKey ) ;
+
+    // bed time stopping hear...
+
+    fSessions[ sessionIndex ] = { 
+      startTime      : new Date ( ) ,
+      acked          : true , // With out cookies this is kinda a lie.
+      serverLongterm : serverLongtermKey , 
+      serverEphermal : undefined ,
+      sessionBoxKey  : boxKey ,
+      connectionId   : connectionId ,
+    } ;
+
   }
 
 } ;
