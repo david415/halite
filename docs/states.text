@@ -1,0 +1,190 @@
+
+=== Notation for key types ===
+
+  S  : Sender Identidy Key
+  S' : Sender Ephermal Key
+  R  : Recepeant Identiy Key
+  R' : Recepenat Ephermal Key
+
+
+=== Envlopes Types with fields ===
+
+  RequestKey
+    - S'
+    - Nonce
+    - Box( R, S' )[ padding ]
+ 
+  RequestKeyResponse
+    - R'
+    - Nonce
+    - Box( R', S )[ S' ]
+
+  StartSession
+    - R'
+    - S'
+    - Nonce
+    - Box( R', S' )[ 
+       - S 
+       - Box( R', S )[ S' ]
+       - connection id 4 bytes
+       - connection authentactor 16 bytes
+       - user bytes
+       ]
+ 
+  SessionMessage
+    - R'
+    - sequance no
+    - Box( R', S' )[ 
+      - session flags 4 bytes: 1b CloseSession, 10b CloseChannel
+      - user bytes
+    ]
+
+  UnknownSession
+    - R'
+    - Nonce
+    - Box( R', S )[ ]
+
+
+=== Api Calls ===
+
+  haliteInit( maxChannels, maxKeyLife, newChannelCallback ) -> manager
+
+  createChannel ( manager, S, R, clientConsumeCallback, clientProduceCallback ) -> channelId
+  destroyChannel ( manager, channelId ) -> errorCode
+
+  openSession ( manager, channelId, currentTime, transportWriteCallback, userBytes ) -> errorCode
+  closeSession ( manager, channelId, currentTime ) -> errorCode
+
+  sendData ( manager, channelId, currentTime, userBytes ) -> errorCode
+
+  receiveEnvlope ( manager, currentTime, envlopeBytes ) -> errorCode
+
+  tick ( manager, currentTime ) -> errorCode
+
+
+=== Possible Channel States ===
+
+  STATE_CLOSED ( pusdo state )
+  STATE_DISCONNECTED
+  STATE_HALF_SESSION
+  STATE_CONNECTED
+
+=== State transistions, messages sent, and return values due to API calls ===
+
+createChannel( )
+  STATE_CLOSED -> STATE_DISCONNECTED
+
+destroyChannel( )
+  STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
+  STATE_DISCONNECTED -> STATE_CLOSED
+  STATE_HALF_SESSION -> STATE_CLOSED
+  STATE_CONNECTED    -> STATE_CLOSED
+     send : SessionMessage[ CloseChannel ]
+
+closeSession( )
+  STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
+  STATE_DISCONNECTED -> ERROR_NOT_CONNECTED
+  STATE_HALF_SESSION -> STATE_DISCONNECTED
+  STATE_CONNECTED    -> STATE_DISCONNECTED
+    send : SessionMessage[ CloseSession ]    
+
+openSession( )
+  STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
+  STATE_DISCONNECTED -> STATE_HALF_SESSION
+    send : RequestKey[ ]
+  STATE_HALF_SESSION -> ERROR_NOT_DISCONNECTED
+  STATE_CONNECTED    -> ERROR_NOT_DISCONNECTED
+
+sendData( )
+  STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
+  STATE_DISCONNECTE  -> ERROR_NOT_CONNECTED
+  STATE_HALF_SESSION -> ERROR_NOT_CONNECTED
+  STATE_CONNECTED    -> SUCESS
+    send : SessionMessage[ user bytes ]
+  
+receiveEnvlope( )
+  Effect based on message received.
+
+
+=== State changes, actions, and messages sent due to recived envlopes ===
+
+  RequestKey -> no state change
+    send : RequestKeyResponse[ ]
+
+  
+  RequestKeyResponse:
+    STATE_CLOSED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_DISCONNECTED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_HALF_SESSION -> STATE_CONNECTED
+      transportWriteCallback( StartSession[ ... ] )
+
+    STATE_CONNECTED -> ignored ( or should this disconnect? )
+
+
+  StartSession:
+    STATE_CLOSED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_DISCONNECTED -> STATE_CONNECTED
+      stateChangeCallbak( STATE_CONNECTED )
+
+    STATE_HALF_SESSION -> STATE_CONNECTED
+      stateChangeCallbak( STATE_CONNECTED )
+
+    STATE_CONNECTED -> ignored ( or should this disconnect? )
+    
+
+   SessionMessage( CloseChannel ):
+    STATE_CLOSED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_DISCONNECTED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_HALF_SESSION -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_CONNECTED -> STATE_CLOSED
+
+
+   SessionMessage( CloseSession ):
+    STATE_CLOSED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_DISCONNECTED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_HALF_SESSION -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_CONNECTED -> STATE_DISCONNECTED
+
+
+   SessionMessage( user data ):
+    STATE_CLOSED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_DISCONNECTED -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_HALF_SESSION -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_CONNECTED -> no state change
+      clientConsumeCallback( user data )
+
+
+  UnknownSession:
+    STATE_CLOSED -> no state change
+
+    STATE_DISCONNECTED -> no state change
+
+    STATE_HALF_SESSION -> no state change
+      transportWriteCallback( UnknownSession[ ] )
+
+    STATE_CONNECTED -> no state change
+      clientConsumeCallback( user data )
