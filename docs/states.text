@@ -45,21 +45,30 @@
     - Box( R', S )[ ]
 
 
-=== Api Calls ===
+=== Api ===
 
-  haliteInit( maxChannels, maxKeyLife, newChannelCallback ) -> manager
+  ResultStruct {
+    channelId ,
+    channelState  ,
+    responseMessage ,
+    userData ,
+  } 
 
-  createChannel ( manager, S, R, clientConsumeCallback, clientProduceCallback ) -> channelId
-  destroyChannel ( manager, channelId ) -> errorCode
+  haliteInit( maxChannels, maxKeyLife ) -> manager
+  haliteFree( manager ) -> errorCode
 
-  openSession ( manager, channelId, currentTime, transportWriteCallback, userBytes ) -> errorCode
-  closeSession ( manager, channelId, currentTime ) -> errorCode
+  createChannel ( manager, S, R, resultStruct ) -> errorCode
+  destroyChannel ( manager, channelId, resultStruct ) -> errorCode
 
-  sendData ( manager, channelId, currentTime, userBytes ) -> errorCode
+  openSession ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
+  closeSession ( manager, channelId, currentTime, resultStruct ) -> errorCode
 
-  receiveEnvlope ( manager, currentTime, envlopeBytes ) -> errorCode
+  sendData ( manager, channelId, currentTime, userBytes, resultStruct ) -> errorCode
 
-  tick ( manager, currentTime ) -> errorCode
+  receiveEnvlope ( manager, currentTime, envlopeBytes, resultStruct ) -> errorCode
+
+  tickChannel ( manager, channelId, currentTime, resultStruct ) -> errorCode
+  tickManager ( manager, currentTime ) -> errorCode
 
 
 === Possible Channel States ===
@@ -72,119 +81,212 @@
 === State transistions, messages sent, and return values due to API calls ===
 
 createChannel( )
-  STATE_CLOSED -> STATE_DISCONNECTED
+  STATE_CLOSED -> 
+      channelState    : STATE_DISCONNECTED
+      userData        : null
+      responseMessage : null
 
 destroyChannel( )
   STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
-  STATE_DISCONNECTED -> STATE_CLOSED
-  STATE_HALF_SESSION -> STATE_CLOSED
-  STATE_CONNECTED    -> STATE_CLOSED
-     send : SessionMessage[ CloseChannel ]
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : null
+
+  STATE_DISCONNECTED -> SUCESS
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : null
+
+  STATE_HALF_SESSION -> SUCESS
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : null
+
+  STATE_CONNECTED    -> SUCESS
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : SessionMessage[ CloseChannel ]
+     
 
 closeSession( )
   STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : null
+
   STATE_DISCONNECTED -> ERROR_NOT_CONNECTED
-  STATE_HALF_SESSION -> STATE_DISCONNECTED
-  STATE_CONNECTED    -> STATE_DISCONNECTED
-    send : SessionMessage[ CloseSession ]    
+      channelState    : STATE_DISCONNECTED
+      userData        : null
+      responseMessage : null
+
+  STATE_HALF_SESSION -> SUCESS
+      channelState    : STATE_DISCONNECTED
+      userData        : null
+      responseMessage : null
+
+  STATE_CONNECTED    -> SUCESS
+      channelState    : STATE_DISCONNECTED
+      userData        : null
+      responseMessage : SessionMessage[ CloseSession ]    
 
 openSession( )
   STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
-  STATE_DISCONNECTED -> STATE_HALF_SESSION
-    send : RequestKey[ ]
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : null
+
+  STATE_DISCONNECTED -> 
+      channelState    : STATE_HALF_SESSION
+      userData        : null
+      responseMessage : RequestKey[ ]
+
   STATE_HALF_SESSION -> ERROR_NOT_DISCONNECTED
+      channelState    : STATE_HALF_SESSION
+      userData        : null
+      responseMessage : null
+
   STATE_CONNECTED    -> ERROR_NOT_DISCONNECTED
+      channelState    : STATE_CONNECTED
+      userData        : null
+      responseMessage : null
 
 sendData( )
   STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : null
+
   STATE_DISCONNECTE  -> ERROR_NOT_CONNECTED
+      channelState    : STATE_DISCONNECTE
+      userData        : null
+      responseMessage : null
+
   STATE_HALF_SESSION -> ERROR_NOT_CONNECTED
+      channelState    : STATE_HALF_SESSION
+      userData        : null
+      responseMessage : null
+
   STATE_CONNECTED    -> SUCESS
-    send : SessionMessage[ user bytes ]
+      channelState    : STATE_CONNECTED
+      userData        : null
+      responseMessage : SessionMessage[ user bytes ]
   
 receiveEnvlope( )
   Effect based on message received.
 
-
-=== State changes, actions, and messages sent due to recived envlopes ===
-
-  RequestKey -> no state change
-    send : RequestKeyResponse[ ]
+  RequestKey -> SUCESS
+    channelState    : STATE_CLOSED
+    userData        : null
+    responseMessage : RequestKeyResponse[ ]
 
   
   RequestKeyResponse:
-    STATE_CLOSED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+    STATE_CLOSED -> ERROR_NOT_CONNECTED
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
-    STATE_DISCONNECTED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+    STATE_DISCONNECTED -> ERROR_NOT_CONNECTED
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
-    STATE_HALF_SESSION -> STATE_CONNECTED
-      transportWriteCallback( StartSession[ ... ] )
+    STATE_HALF_SESSION -> SUCESS
+      channelState    : STATE_CONNECTED
+      userData        : null
+      responseMessage : StartSession[ ... ]
 
-    STATE_CONNECTED -> ignored ( or should this disconnect? )
+    STATE_CONNECTED -> ignored ( or should this disconnect as it should not happen? )
 
 
   StartSession:
-    STATE_CLOSED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+    STATE_CLOSED -> ERROR_NOT_CONNECTED
+      channelState    : STATE_CLOSED
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
-    STATE_DISCONNECTED -> STATE_CONNECTED
-      stateChangeCallbak( STATE_CONNECTED )
+    STATE_DISCONNECTED -> SUCESS
+      channelState    : STATE_CONNECTED
+      userData        : user data
+      responseMessage : null
 
-    STATE_HALF_SESSION -> STATE_CONNECTED
-      stateChangeCallbak( STATE_CONNECTED )
+    STATE_HALF_SESSION -> SUCESS
+      channelState    : STATE_CONNECTED
+      userData        : user data
+      responseMessage : null
 
-    STATE_CONNECTED -> ignored ( or should this disconnect? )
+    STATE_CONNECTED -> ignored ( can happen to both raceing on open )
+      channelState    : STATE_CONNECTED
+      userData        : null
+      responseMessage : null
     
 
    SessionMessage( CloseChannel ):
     STATE_CLOSED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
     STATE_DISCONNECTED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
     STATE_HALF_SESSION -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
     STATE_CONNECTED -> STATE_CLOSED
-
+      userData        : null
+      responseMessage : null
 
    SessionMessage( CloseSession ):
     STATE_CLOSED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
     STATE_DISCONNECTED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage : UnknownSession[ ] )
 
     STATE_HALF_SESSION -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage : UnknownSession[ ] )
 
     STATE_CONNECTED -> STATE_DISCONNECTED
+      userData        : null
+      responseMessage : null
 
 
    SessionMessage( user data ):
     STATE_CLOSED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
     STATE_DISCONNECTED -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage :  UnknownSession[ ]
 
     STATE_HALF_SESSION -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+      userData        : null
+      responseMessage : UnknownSession[ ]
 
     STATE_CONNECTED -> no state change
-      clientConsumeCallback( user data )
+      userData        : user data
+      responseMessage : null
 
 
   UnknownSession:
     STATE_CLOSED -> no state change
+      userData        : null
+      responseMessage : null
 
     STATE_DISCONNECTED -> no state change
+      userData        : null
+      responseMessage : null
 
-    STATE_HALF_SESSION -> no state change
-      transportWriteCallback( UnknownSession[ ] )
+    STATE_HALF_SESSION -> STATE_DISCONNECTED
+      userData        : null
+      responseMessage : null
 
-    STATE_CONNECTED -> no state change
-      clientConsumeCallback( user data )
+    STATE_CONNECTED -> STATE_DISCONNECTED
+      userData        : null
+      responseMessage : null
