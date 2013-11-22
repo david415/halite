@@ -60,12 +60,11 @@
   createChannel ( manager, S, R, resultStruct ) -> errorCode
   destroyChannel ( manager, channelId, resultStruct ) -> errorCode
 
-  openSession ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
-  closeSession ( manager, channelId, currentTime, resultStruct ) -> errorCode
+  openSession  ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
+  closeSession ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
+  sendData     ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
 
-  sendData ( manager, channelId, currentTime, userBytes, resultStruct ) -> errorCode
-
-  receiveEnvlope ( manager, currentTime, envlopeBytes, resultStruct ) -> errorCode
+  receiveEnvlope ( manager, currentTime, resultStruct, envlopeBytes ) -> errorCode
 
   tickChannel ( manager, channelId, currentTime, resultStruct ) -> errorCode
   tickManager ( manager, currentTime ) -> errorCode
@@ -73,15 +72,22 @@
 
 === Possible Channel States ===
 
-  STATE_CLOSED ( pusdo state )
-  STATE_DISCONNECTED
-  STATE_HALF_SESSION
-  STATE_CONNECTED
+  STATE_CLOSED       : No matchin channel exists
+  STATE_DISCONNECTED : Channel exists but no session exists
+  STATE_HALF_SESSION : Local ephermal key exists but no remote ephermal key is known
+  STATE_CONNECTED    : Local and remote ephermal keys are known
+
 
 === State transistions, messages sent, and return values due to API calls ===
 
+Error codes:
+  SUCESS                 : opperation was secussfull
+  ERROR_UNKNOWN_CHANNEL  : the referenced channel id is unknown
+  ERROR_DISCONNECTED     : the referenced session id is unknown
+  ERROR_NOT_DISCONNECTED : the opperation is only valid on disconnected channels
+
 createChannel( )
-  STATE_CLOSED -> 
+  STATE_CLOSED -> SUCESS
       channelState    : STATE_DISCONNECTED
       userData        : null
       responseMessage : null
@@ -114,12 +120,12 @@ closeSession( )
       userData        : null
       responseMessage : null
 
-  STATE_DISCONNECTED -> ERROR_NOT_CONNECTED
+  STATE_DISCONNECTED -> ERROR_DISCONNECTED
       channelState    : STATE_DISCONNECTED
       userData        : null
       responseMessage : null
 
-  STATE_HALF_SESSION -> SUCESS
+  STATE_HALF_SESSION -> ERROR_DISCONNECTED
       channelState    : STATE_DISCONNECTED
       userData        : null
       responseMessage : null
@@ -127,7 +133,8 @@ closeSession( )
   STATE_CONNECTED    -> SUCESS
       channelState    : STATE_DISCONNECTED
       userData        : null
-      responseMessage : SessionMessage[ CloseSession ]    
+      responseMessage : SessionMessage[ CloseSession, user bytes ]    
+
 
 openSession( )
   STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
@@ -135,7 +142,7 @@ openSession( )
       userData        : null
       responseMessage : null
 
-  STATE_DISCONNECTED -> 
+  STATE_DISCONNECTED -> SUCESS
       channelState    : STATE_HALF_SESSION
       userData        : null
       responseMessage : RequestKey[ ]
@@ -150,18 +157,19 @@ openSession( )
       userData        : null
       responseMessage : null
 
+
 sendData( )
   STATE_CLOSED       -> ERROR_UNKNOWN_CHANNEL
       channelState    : STATE_CLOSED
       userData        : null
       responseMessage : null
 
-  STATE_DISCONNECTE  -> ERROR_NOT_CONNECTED
+  STATE_DISCONNECTE  -> ERROR_DISCONNECTED
       channelState    : STATE_DISCONNECTE
       userData        : null
       responseMessage : null
 
-  STATE_HALF_SESSION -> ERROR_NOT_CONNECTED
+  STATE_HALF_SESSION -> ERROR_DISCONNECTED
       channelState    : STATE_HALF_SESSION
       userData        : null
       responseMessage : null
@@ -170,6 +178,7 @@ sendData( )
       channelState    : STATE_CONNECTED
       userData        : null
       responseMessage : SessionMessage[ user bytes ]
+
   
 receiveEnvlope( )
   Effect based on message received.
@@ -181,12 +190,12 @@ receiveEnvlope( )
 
   
   RequestKeyResponse:
-    STATE_CLOSED -> ERROR_NOT_CONNECTED
+    STATE_CLOSED -> ERROR_DISCONNECTED
       channelState    : STATE_CLOSED
       userData        : null
       responseMessage : UnknownSession[ ]
 
-    STATE_DISCONNECTED -> ERROR_NOT_CONNECTED
+    STATE_DISCONNECTED -> ERROR_DISCONNECTED
       channelState    : STATE_CLOSED
       userData        : null
       responseMessage : UnknownSession[ ]
@@ -200,7 +209,7 @@ receiveEnvlope( )
 
 
   StartSession:
-    STATE_CLOSED -> ERROR_NOT_CONNECTED
+    STATE_CLOSED -> ERROR_DISCONNECTED
       channelState    : STATE_CLOSED
       userData        : null
       responseMessage : UnknownSession[ ]
@@ -210,7 +219,7 @@ receiveEnvlope( )
       userData        : user data
       responseMessage : null
 
-    STATE_HALF_SESSION -> SUCESS
+    STATE_HALF_SESSION -> SUCESS ( can happen to both raceing on open )
       channelState    : STATE_CONNECTED
       userData        : user data
       responseMessage : null
@@ -221,72 +230,46 @@ receiveEnvlope( )
       responseMessage : null
     
 
-   SessionMessage( CloseChannel ):
-    STATE_CLOSED -> no state change
+   SessionMessage:
+
+    STATE_CLOSED -> ERROR_DISCONNECTED
+      channelState    : STATE_CLOSED
       userData        : null
       responseMessage : UnknownSession[ ]
 
-    STATE_DISCONNECTED -> no state change
+    STATE_DISCONNECTED ( not reachable )
+
+    STATE_HALF_SESSION -> ERROR_DISCONNECTED
+      channelState    : STATE_HALF_SESSION
       userData        : null
       responseMessage : UnknownSession[ ]
 
-    STATE_HALF_SESSION -> no state change
-      userData        : null
-      responseMessage : UnknownSession[ ]
-
-    STATE_CONNECTED -> STATE_CLOSED
-      userData        : null
-      responseMessage : null
-
-   SessionMessage( CloseSession ):
-    STATE_CLOSED -> no state change
-      userData        : null
-      responseMessage : UnknownSession[ ]
-
-    STATE_DISCONNECTED -> no state change
-      userData        : null
-      responseMessage : UnknownSession[ ] )
-
-    STATE_HALF_SESSION -> no state change
-      userData        : null
-      responseMessage : UnknownSession[ ] )
-
-    STATE_CONNECTED -> STATE_DISCONNECTED
-      userData        : null
-      responseMessage : null
-
-
-   SessionMessage( user data ):
-    STATE_CLOSED -> no state change
-      userData        : null
-      responseMessage : UnknownSession[ ]
-
-    STATE_DISCONNECTED -> no state change
-      userData        : null
-      responseMessage :  UnknownSession[ ]
-
-    STATE_HALF_SESSION -> no state change
-      userData        : null
-      responseMessage : UnknownSession[ ]
-
-    STATE_CONNECTED -> no state change
-      userData        : user data
+    STATE_CONNECTED -> SUCESS
+      channelState    : STATE_CLOSED: CloseChannel
+                        STATE_DISCONNECTED: CloseSession
+                        STATE_CONNECTED: no flags
+      userData        : user bytes
       responseMessage : null
 
 
   UnknownSession:
-    STATE_CLOSED -> no state change
+
+    STATE_CLOSED -> ERROR_DISCONNECTED
+      channelState    : STATE_CLOSED
       userData        : null
       responseMessage : null
 
-    STATE_DISCONNECTED -> no state change
+    STATE_DISCONNECTED -> ERROR_DISCONNECTED
+      channelState    : STATE_DISCONNECTED
       userData        : null
       responseMessage : null
 
     STATE_HALF_SESSION -> STATE_DISCONNECTED
+      channelState    : STATE_DISCONNECTED
       userData        : null
       responseMessage : null
 
     STATE_CONNECTED -> STATE_DISCONNECTED
+      channelState    : STATE_DISCONNECTED
       userData        : null
       responseMessage : null
