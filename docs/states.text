@@ -54,11 +54,18 @@
     userData ,
   } 
 
+  ChannelIdentiyStruct {
+    remotePublic ,
+    senderPublic ,
+    senderPrivate ,
+  }
+
   haliteInit( maxChannels, maxKeyLife ) -> manager
   haliteFree( manager ) -> errorCode
 
-  createChannel ( manager, S, R, resultStruct ) -> errorCode
+  createChannel ( manager, channelIdentiyStruct, resultStruct ) -> errorCode
   destroyChannel ( manager, channelId, resultStruct ) -> errorCode
+  getChannelIdentity ( manager, channelId, channelIdentiyStruct ) -> errorCode
 
   openSession  ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
   closeSession ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode

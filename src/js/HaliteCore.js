@@ -1,5 +1,174 @@
 
-function HaliteCore ( fNacl, fIdentityKeyPair, fInitTime, fMaxKeyAge ) {
+function HaliteCore ( fNacl ) {
+
+  var self = {} ;
+
+  var SUCESS                 = 0 ;
+  var ERROR_UNKNOWN_CHANNEL  = 1 ;
+  var ERROR_DISCONNECTED     = 2 ;
+  var ERROR_NOT_DISCONNECTED = 3 ;
+  var ERROR_INTERNAL         = 4 ;
+  var ERROR_MAX_CHANNELS     = 5 ;
+
+  var STATE_CLOSED       = 1 ;
+  var STATE_DISCONNECTED = 2 ;
+  var STATE_HALF_SESSION = 3 ;
+  var STATE_CONNECTED    = 4 ;
+
+  var EMPTY_FLAGS         = 0 ;
+  var CLOSE_SESSION_FLAGS = 1 ;
+  var CLOSE_CHANNEL_FLAGS = 2 ;
+
+  self.SUCESS                 = SUCESS ;
+  self.ERROR_UNKNOWN_CHANNEL  = ERROR_UNKNOWN_CHANNEL ;
+  self.ERROR_DISCONNECTED     = ERROR_DISCONNECTED ;
+  self.ERROR_NOT_DISCONNECTED = ERROR_NOT_DISCONNECTED ;
+  self.ERROR_INTERNAL         = ERROR_INTERNAL ;
+  self.ERROR_MAX_CHANNELS     = ERROR_MAX_CHANNELS ;
+
+  self.STATE_CLOSED       = STATE_CLOSED ;
+  self.STATE_DISCONNECTED = STATE_DISCONNECTED ;
+  self.STATE_HALF_SESSION = STATE_HALF_SESSION ;
+  self.STATE_CONNECTED    = STATE_CONNECTED ;
+
+
+  self.ResultStruct         = ResultStruct ;
+  self.ChannelIdentiyStruct = ChannelIdentiyStruct ;
+
+  self.haliteInit    = haliteInit ;
+  self.createChannel = createChannel ;
+
+  return self ;
+
+
+  function ResultStruct ( ) {
+    return {
+      channelId       : undefined ,
+      channelState    : undefined ,
+      responseMessage : undefined ,
+      userData        : undefined ,
+      } ;
+  }
+
+  function ChannelIdentiyStruct ( ) {
+    return {
+      remotePublic  : undefined ,
+      senderPublic  : undefined ,
+      senderPrivate : undefined ,
+    } ;
+  } 
+
+  
+  function clearResultStruct ( resultStruct ) {
+    resultStruct.channelId       = undefined ;
+    resultStruct.channelState    = STATE_CLOSED ;
+    resultStruct.responseMessage = undefined ;
+    resultStruct.userData        = undefined ;
+  }
+
+  function haliteInit ( maxChannels, maxKeyLife ) {
+    var result = {
+      maxChannels  : maxChannels ,
+      maxKeyLife   : maxKeyLife ,
+      channels     : { } ,
+      channelCount : 0 ,
+    } ;
+
+    return result ;
+  }
+
+  function haliteFree( manager ) {
+    return SUCESS ;
+  }
+
+  function createChannel ( manager, channelIdentiyStruct, resultStruct ) {
+    
+    if ( manager.channelCount >= manager.maxChannels ) {
+      clearResultStruct( resultStruct ) ;
+      return ERROR_MAX_CHANNELS ;
+    }
+
+    // BUG: is 128 bits enough?
+    var buf = new Uint8Array( 16 ); 
+
+    window.crypto.getRandomValues( buf );
+
+    vae channelId = String.fromCharCode.apply( null, buf );
+    var channel = { } ;
+
+    if ( manager.channels[ channelId ] !== undefined ) {
+      clearResultStruct( resultStruct ) ;
+      return ERROR_INTERNAL ;
+    }
+
+    manager.channels[ channelId ] = channel ;
+    
+    channel.remotePublicIdent  = channelIdentiyStruct.remotePublic ;
+    channel.senderPublicIdent  = channelIdentiyStruct.senderPublic ;
+    channel.senderPrivateIdent = channelIdentiyStruct.senderPrivate ;
+    channel.remotePublicEphem  = undefined ;
+    channel.senderEphemralPair = undefined ;
+    channel.boxKey             = undefined ;
+    channel.channelState       = STATE_DISCONNECTED ;
+    channel.lastSentTime       = undefined ;
+    channel.lastRecievedTime   = undefined ;
+    channel.openBytes          = undefined ;
+      
+    resultStruct.channelId       = channelId ;
+    resultStruct.channelState    = STATE_DISCONNECTED ;
+    resultStruct.responseMessage = undefined ;
+    resultStruct.userData        = undefined ;
+
+    return SUCESS ;
+  }
+
+
+  function destroyChannel ( manager, channelId, resultStruct ) {
+
+    clearResultStruct( resultStruct ) ;
+
+    var channels = manager.channels ;
+    var channel  = channels[ channelId ] ;
+
+    if ( channel === undefined )
+      return ERROR_UNKNOWN_CHANNEL ;
+
+    delete channels[ channelId ] ;
+
+    resultStruct.channelId    = channelId ;
+    resultStruct.channelState = STATE_CLOSED ;
+
+    if ( channel.channelState === STATE_CONNECTED ) {
+      var messageResult = SessionMessage( channel, resultStruct, CLOSE_CHANNEL_FLAGS, "" ) ;
+      
+      if ( messageResult !== SUCESS )
+        return ERROR_INTERNAL ;
+    }
+
+    return SUCESS ;
+  }
+    
+  getChannelIdentity ( manager, channelId, channelIdentiyStruct ) -> errorCode
+
+  openSession  ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
+  closeSession ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
+  sendData     ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
+
+  receiveEnvlope ( manager, currentTime, resultStruct, envlopeBytes ) -> errorCode
+
+  tickChannel ( manager, channelId, currentTime, resultStruct ) -> errorCode
+    tickManager ( manager, currentTime ) -> errorCode ;
+
+
+  ////////// envlope builders //////////
+
+  function SessionMessage ( channel, resultStruct, flags, userBytes ) {
+
+  }
+}
+  ///////////////////////////////////////////
+
+function HaliteCoreOld ( fNacl, fIdentityKeyPair, fInitTime, fMaxKeyAge ) {
 
   var STATE_DISCONNECTED    = 0 ;
   var STATE_REQUESTING_KEY  = 1 ;
