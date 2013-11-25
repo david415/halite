@@ -26,14 +26,13 @@
     - Box( R', S' )[ 
        - S 
        - Box( R', S )[ S' ]
-       - connection id 4 bytes
-       - connection authentactor 16 bytes
+       - connection id 16 bytes
        - user bytes
        ]
  
   SessionMessage
     - R'
-    - sequance no
+    - counter
     - Box( R', S' )[ 
       - session flags 4 bytes: 1b CloseSession, 10b CloseChannel
       - user bytes

@@ -1,11 +1,9 @@
 [
-  "Request new ephermal key from server using the client ephemreal key and the server longerm key.",
   { "type"    : "RequestKey",
     "version" : 2 ,
     "fields" : [
-    { "name" : "clientEKey" , "type" : "bit256" },
+    { "name" : "senderEKey" , "type" : "bit256" },
     { "name" : "nonce"      , "type" : "bit192" },
-    "Box( cEK, sLK )[ RequestKeyBoxedData ]",
     { "name" : "cryptoBox"  , "type" : "bytes"  }
   ] },
 
@@ -16,91 +14,70 @@
   ] },
 
 
-  "Server responds with server ephermreal key useing client ephermal key and server longterm key.",  
   { "type"    : "RequestKeyResponse",
     "version" : 2 ,
     "fields" : [
-    { "name" : "clientEKey" , "type" : "bit256" },
-    { "name" : "nonce"      , "type" : "bit192" },
-    "Box( sLK, cEK )[ RequestKeyResponseBoxedData ]",
-    { "name" : "cryptoBox"  , "type" : "bytes"  }
+    { "name" : "recipientEKey" , "type" : "bit256" },
+    { "name" : "nonce"         , "type" : "bit192" },
+    { "name" : "cryptoBox"     , "type" : "bytes"  }
   ] },
 
   { "type"    : "RequestKeyResponseBoxedData",
     "version" : 2 ,
     "fields" : [
-    { "name" : "serverEKey" , "type" : "bit256" }
+    { "name" : "SenderEKey" , "type" : "bit256" }
   ] },
 
 
-  "Start a new encrypted session using the the server and client ephermal keys.",
-  "Client authentacates it's ephermal key and connectionId using it's longterm key.",
   { "type"    : "StartSession",
     "version" : 2 ,
     "fields" : [
-    { "name" : "clientEKey" , "type" : "bit256" },
-    { "name" : "serverEKey" , "type" : "bit256" },
-    { "name" : "nonce"      , "type" : "bit192" },
+    { "name" : "senderEKey"    , "type" : "bit256" },
+    { "name" : "recipientEKey" , "type" : "bit256" },
+    { "name" : "nonce"         , "type" : "bit192" },
     "Box( cEK, sEK )[ StartSessionBoxedData ]",
-    { "name" : "cryptoBox"  , "type" : "bytes"  }
+    { "name" : "cryptoBox"     , "type" : "bytes"  }
   ] },
 
   { "type"    : "StartSessionBoxedData",
     "version" : 2 ,
     "fields" : [
-    { "name" : "data"       , "type" : "bytes" },
-    { "name" : "clientLKey" , "type" : "bit256" },
+    { "name" : "senderLKey" , "type" : "bit256" },
     { "name" : "nonce"      , "type" : "bit192" },
-    "Box( sEK, cLK )[ StartSessionKeyVouch ]",
-    { "name" : "cryptoBox"  , "type" : "bytes"  }
+    { "name" : "cryptoBox"  , "type" : "bytes"  },
+    { "name" : "channelId"  , "type" : "bit128" },
+    { "name" : "userBytes"  , "type" : "bytes"  }
   ] },
 
   { "type"    : "StartSessionKeyVouch",
     "version" : 2 ,
     "fields" : [
-    { "name" : "clientEKey"   , "type" : "bit256" },
-    { "name" : "connectionId" , "type" : "uInt32" }
+    { "name" : "senderEKey", "type" : "bit256" }
   ] },
 
 
-  "End a session. If endConnection is 1 ( true ) also end the connection.",
-  { "type"    : "EndSession",
+  { "type"    : "SessionMessage",
     "version" : 2 ,
     "fields" : [
-    { "name" : "senderEKey"   , "type" : "bit256" },
-    { "name" : "receiverEKey" , "type" : "bit256" },
-    { "name" : "nonce"        , "type" : "bit192" },
-    "Box( senderEK, receiverEK )[ EndSessionBoxedData ]",
-    { "name" : "cryptoBox"    , "type" : "bytes"  }
-  ] },
-
-  { "type"    : "EndSessionBoxedData",
-    "version" : 2 ,
-    "fields" : [
-    "1 == true, 0 == false, others are reserved",
-    { "name" : "endConnection" , "type" : "uInt8" }
-  ] },
-
-
-  "Send applacation data.",
-  { "type"    : "SessionData",
-    "version" : 2 ,
-    "fields" : [
-    { "name" : "senderEKey"   , "type" : "bit256" },
-    { "name" : "receiverEKey" , "type" : "bit256" },
-    { "name" : "nonce"        , "type" : "bit192" },
-    "Box( senderEK, receiverEK )[ bytes ]",
-    { "name" : "cryptoBox"    , "type" : "bytes"  }
-  ] },
-
-
-  "Inform the clinet that it's session is invalad.",
-  { "type"    : "InvalidSession",
-    "version" : 2 ,
-    "fields" : [
-    { "name" : "clientEKey" , "type" : "bit256" },
-    "Box( sLK, cEK )[ InvalidSessionBoxedData ]" ,
+    { "name" : "senderEKey" , "type" : "bit256" },
+    { "name" : "counter"    , "type" : "bit192" },
     { "name" : "cryptoBox"  , "type" : "bytes"  }
+  ] },
+
+  { "type"    : "SessionMessageBoxedData",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "flags"     , "type" : "uInt32" },
+    { "name" : "userBytes" , "type" : "bytes"  }
+  ] },
+
+
+  { "type"    : "UnknownSession",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "receiverEKey" , "type" : "bit256" },
+    { "name" : "nonce"        , "type" : "bit192" },
+    { "name" : "cryptoBox"    , "type" : "bytes"  }
   ] },
 
   { "type"    : "InvalidSessionBoxedData",

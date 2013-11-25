@@ -1,7 +1,41 @@
 
 function HaliteCore ( fNacl ) {
+  "use strict" ;
 
-  var self = {} ;
+  var REQUEST_KEY_BUILDER = {
+    clientEKey : undefined ,
+    nonce      : undefined ,
+    cryptoBox  : undefined ,
+  } ;
+
+  var REQUEST_KEY_RESPONSE_BUILDER = {
+    clientEKey : undefined ,
+    nonce      : undefined ,
+    cryptoBox  : undefined ,
+  } ;
+
+  var REQUEST_KEY_RESPONSE_BOXED_DATA_BUILDER = {
+    serverEKey : undefined ,
+  } ;
+
+  var START_SESSION_BUILDER = {
+    clientEKey : undefined ,
+    serverEKey : undefined ,
+    nonce      : undefined ,
+    cryptoBox  : undefined ,      
+  };
+
+  var START_SESSION_BOXED_DATA_BUILDER = {
+    data       : undefined ,
+    clientLKey : undefined ,
+    nonce      : undefined ,
+    cryptoBox  : undefined ,      
+  };
+
+  var START_SESSION_KEY_VOUCH_BUILDER = {
+    clientEKey   : undefined ,
+    connectionId : undefined ,
+  };
 
   var SUCESS                 = 0 ;
   var ERROR_UNKNOWN_CHANNEL  = 1 ;
@@ -18,6 +52,9 @@ function HaliteCore ( fNacl ) {
   var EMPTY_FLAGS         = 0 ;
   var CLOSE_SESSION_FLAGS = 1 ;
   var CLOSE_CHANNEL_FLAGS = 2 ;
+
+
+  var self = {} ;
 
   self.SUCESS                 = SUCESS ;
   self.ERROR_UNKNOWN_CHANNEL  = ERROR_UNKNOWN_CHANNEL ;
@@ -36,10 +73,14 @@ function HaliteCore ( fNacl ) {
   self.ChannelIdentiyStruct = ChannelIdentiyStruct ;
 
   self.haliteInit    = haliteInit ;
-  self.createChannel = createChannel ;
+
+  self.createChannel      = createChannel ;
+  self.destroyChannel     = destroyChannel ;
+  self.getChannelIdentity = getChannelIdentity ;
+
+  self.openSession = openSession ;
 
   return self ;
-
 
   function ResultStruct ( ) {
     return {
@@ -49,6 +90,7 @@ function HaliteCore ( fNacl ) {
       userData        : undefined ,
       } ;
   }
+
 
   function ChannelIdentiyStruct ( ) {
     return {
@@ -66,10 +108,53 @@ function HaliteCore ( fNacl ) {
     resultStruct.userData        = undefined ;
   }
 
+
+  function uint8ArrayToString ( arr ) {
+    return String.fromCharCode.apply( null, arr );
+  }
+
+
+  function possiblyRotateKey ( manager, currentTime ) {
+
+    if ( ( currentTime - manager.ephermalKeyCreated ) >= manager.rotationAge )
+      rotateEphermalKey( manager, currentTime ) ;
+
+    if ( ( currentTime - manager.oldEphermalKeyCreated ) >= manager.maxKeyLife )
+      forgetOld( manager ) ;
+  }
+
+
+  function forgetOld ( manager ) {
+    manager.oldEphermalKeyCreated     = undefined ;
+    manager.oldEphermalKeyOutstanding = undefined ;
+    manager.oldEphermalKeyPair        = undefined ;
+    manager.oldEphermalKeyPairIndex   = undefined ;
+  }
+
+
+  function rotateEphermalKey ( manager, currentTime ) {
+    manager.oldEphermalKeyCreated     = manager.ephermalKeyCreated ;
+    manager.oldEphermalKeyOutstanding = manager.ephermalKeyOutstanding ;
+    manager.oldEphermalKeyPair        = manager.ephermalKeyPair ;
+    manager.oldEphermalKeyPairIndex   = manager.ephermalKeyPairIndex ;
+
+    initEphermalKey( manager, currentTime ) ;
+  }
+
+
+  function initEphermalKey ( manager, currentTime ) {
+    manager.ephermalKeyCreated     = currentTime ;
+    manager.ephermalKeyOutstanding = 0 ;
+    manager.ephermalKeyPair        = fNacl.crypto_box_keypair( ) ;
+    manager.ephermalKeyPairIndex   = uint8ArrayToString( manager.ephermalKeyPair.boxPk ) ;
+  }
+
+
   function haliteInit ( maxChannels, maxKeyLife ) {
     var result = {
       maxChannels  : maxChannels ,
       maxKeyLife   : maxKeyLife ,
+      rotationAge  : maxKeyLife / 2 ,
       channels     : { } ,
       channelCount : 0 ,
     } ;
@@ -77,9 +162,11 @@ function HaliteCore ( fNacl ) {
     return result ;
   }
 
+
   function haliteFree( manager ) {
     return SUCESS ;
   }
+
 
   function createChannel ( manager, channelIdentiyStruct, resultStruct ) {
     
@@ -89,11 +176,11 @@ function HaliteCore ( fNacl ) {
     }
 
     // BUG: is 128 bits enough?
-    var buf = new Uint8Array( 16 ); 
+    var buf = new Uint8Array( 16 ) ; 
 
-    window.crypto.getRandomValues( buf );
+    window.crypto.getRandomValues( buf ) ;
 
-    vae channelId = String.fromCharCode.apply( null, buf );
+    vae channelId = uint8ArrayToString( buf ) ;
     var channel = { } ;
 
     if ( manager.channels[ channelId ] !== undefined ) {
@@ -147,24 +234,110 @@ function HaliteCore ( fNacl ) {
 
     return SUCESS ;
   }
-    
-  getChannelIdentity ( manager, channelId, channelIdentiyStruct ) -> errorCode
+   
+ 
+  function getChannelIdentity ( manager, channelId, channelIdentiyStruct ) {
 
-  openSession  ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
-  closeSession ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
+    var channels = manager.channels ;
+    var channel  = channels[ channelId ] ;
+
+    var result ;
+
+    if ( channel === undefined ) {
+      result = ERROR_UNKNOWN_CHANNEL ;
+      channelIdentiyStruct.remotePublic  = undefined ;
+      channelIdentiyStruct.senderPublic  = undefined ;
+      channelIdentiyStruct.senderPrivate = undefined ;
+    }
+
+    else {
+      result = SUCESS ;
+      channelIdentiyStruct.remotePublic  = channel.remotePublicIdent ;
+      channelIdentiyStruct.senderPublic  = channel.senderPublicIdent ;
+      channelIdentiyStruct.senderPrivate = channel.senderPrivateIdent ;
+    }
+
+    return result ;
+  }
+
+
+  function openSession ( manager, channelId, currentTime, resultStruct, userBytes ) {
+
+    clearResultStruct( resultStruct ) ;
+
+    var channels = manager.channels ;
+    var channel  = channels[ channelId ] ;
+
+    if ( channel === undefined )
+      return ERROR_UNKNOWN_CHANNEL ;
+
+    if ( channel.channelState !== STATE_CLOSED ) {
+      resultStruct.channelId = channelchannelId ;
+      return ERROR_NOT_DISCONNECTED ;
+    }
+
+    var sesssionKeyPair = fNacl.crypto_box_keypair( ) ;
+
+    var boxKey = fNacl.crypto_box_precompute( channel.remotePublicIdent, sesssionKeyPair.boxSk ) ;
+
+    var toBox = new Uint8Array ( 32 ) ; // Padding
+    var nonce = nacl.crypto_box_random_nonce() ;
+    var boxed = fNacl.crypto_box_precomputed( toBox, nonce, boxKey ) ;
+   
+    REQUEST_SESSION_BUILDER.clientEKey = sesssionKeyPair.boxPk ;
+    REQUEST_SESSION_BUILDER.nonce      = nonce ;
+    REQUEST_SESSION_BUILDER.cryptoBox  = boxed ;
+
+    var message = messages.make_RequestKey( REQUEST_SESSION_BUILDER ) ;
+
+    resultStruct.channelId       = channel.channelId ;
+    resultStruct.channelState    = STATE_HALF_SESSION ;
+    resultStruct.responseMessage = messages ;
+
+    channel.senderEphemralPair = sesssionKeyPair ;
+    channel.boxKey             = boxKey ;
+    channel.channelState       = STATE_HALF_SESSION ;
+    channel.lastSentTime       = currentTime ;
+    channel.openBytes          = userBytes ;    
+    
+    return SUCESS ;
+  }
+
+
+  function closeSession ( manager, channelId, currentTime, resultStruct, userBytes ) {
+
+    clearResultStruct( resultStruct ) ;
+
+    var channels = manager.channels ;
+    var channel  = channels[ channelId ] ;
+
+    if ( channel === undefined )
+      return ERROR_UNKNOWN_CHANNEL ;
+
+    if ( channel.channelState !== STATE_CONNECTED ) {
+      resultStruct.channelId = channelchannelId ;
+      return ERROR_DISCONNECTED ;
+    }
+    
+    var message = SessionMessage( channel.boxKey, CLOSE_SESSION_FLAGS, userBytes ) ;
+
+  }
+
+
   sendData     ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
 
   receiveEnvlope ( manager, currentTime, resultStruct, envlopeBytes ) -> errorCode
 
   tickChannel ( manager, channelId, currentTime, resultStruct ) -> errorCode
-    tickManager ( manager, currentTime ) -> errorCode ;
+  tickManager ( manager, currentTime ) -> errorCode ;
 
 
   ////////// envlope builders //////////
 
-  function SessionMessage ( channel, resultStruct, flags, userBytes ) {
-
+  function SessionMessage ( channel.boxKey, flags, userBytes ) {
+    
   }
+
 }
   ///////////////////////////////////////////
 
