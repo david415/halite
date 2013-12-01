@@ -357,7 +357,7 @@ FOOTER = """
 """
 
 
-TAGGED_FILED_BUILDER_START = """
+TAGGED_FIELD_BUILDER_START = """
 static inline size_t build_TaggedField ( char* data, size_t length, struct TaggedField_builder* builder_data ) {
 
     if ( length < 8 )
@@ -369,12 +369,12 @@ static inline size_t build_TaggedField ( char* data, size_t length, struct Tagge
 
     switch( builder_data->tag ) {"""
 
-TAGGED_FILED_BUILDER_TYPE = """
+TAGGED_FIELD_BUILDER_TYPE = """
        case 0x%(tag)s :
            wrote = build_%(type)s( data + sizeof( uint64_t ),  length - sizeof( uint64_t ), (struct %(type)s_builder*)builder_data->data ) ;
            break ;"""
 
-TAGGED_FILED_BUILDER_END = """
+TAGGED_FIELD_BUILDER_END = """
        default:
            wrote = 0 ;
            break ;
@@ -387,19 +387,19 @@ TAGGED_FILED_BUILDER_END = """
 }
 """
 
-TAGGED_FILED_COMPUTER_START = """
+TAGGED_FIELD_COMPUTER_START = """
 size_t static inline compute_TaggedField_length ( struct TaggedField_builder* builder_data ) {
 
     size_t length ;
 
     switch( builder_data->tag ) {"""
 
-TAGGED_FILED_COMPUTER_TYPE = """
+TAGGED_FIELD_COMPUTER_TYPE = """
        case 0x%(tag)s :
            length = compute_%(type)s_length( (struct %(type)s_builder*)builder_data->data ) ;
            break ;"""
 
-TAGGED_FILED_COMPUTER_END = """
+TAGGED_FIELD_COMPUTER_END = """
        default:
            length = 0 ;
            break ;
@@ -668,27 +668,27 @@ def printC ( typeDb ) :
             print "\n    return current_offset;\n}\n"
 
             
-    print TAGGED_FILED_BUILDER_START
+    print TAGGED_FIELD_BUILDER_START
     
     for name, info in typeDb.items() :
 
         if info.isComposite( ) :
-            print TAGGED_FILED_BUILDER_TYPE % \
+            print TAGGED_FIELD_BUILDER_TYPE % \
                   { 'tag' : info.getTag() , 'type' : info.getName() }
 
-    print TAGGED_FILED_BUILDER_END
+    print TAGGED_FIELD_BUILDER_END
 
 
 
-    print TAGGED_FILED_COMPUTER_START
+    print TAGGED_FIELD_COMPUTER_START
     
     for name, info in typeDb.items() :
 
         if info.isComposite( ) :
-            print TAGGED_FILED_COMPUTER_TYPE % \
+            print TAGGED_FIELD_COMPUTER_TYPE % \
                   { 'tag' : info.getTag() , 'type' : info.getName() }
 
-    print TAGGED_FILED_COMPUTER_END
+    print TAGGED_FIELD_COMPUTER_END
 
 
     print FOOTER
