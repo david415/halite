@@ -1,10 +1,10 @@
 
 === Notation for key types ===
 
-  S  : Sender Identidy Key
-  S' : Sender Ephermal Key
-  R  : Recepeant Identiy Key
-  R' : Recepenat Ephermal Key
+  S  : Sender Identity Key
+  S' : Sender Ephemeral Key
+  R  : Recepeant Identity Key
+  R' : Recepenat Ephemeral Key
 
 
 === Envlopes Types with fields ===
