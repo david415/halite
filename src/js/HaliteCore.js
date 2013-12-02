@@ -2,12 +2,15 @@
 function HaliteCore ( fNacl ) {
   "use strict" ;
 
+  var REQUEST_KEY_BYTE = 1 ;
   var REQUEST_KEY_BUILDER = {
     clientEKey : undefined ,
     nonce      : undefined ,
     cryptoBox  : undefined ,
   } ;
 
+
+  var REQUEST_KEY_RESPONSE_BYTE = 2 ;
   var REQUEST_KEY_RESPONSE_BUILDER = {
     clientEKey : undefined ,
     nonce      : undefined ,
@@ -18,6 +21,7 @@ function HaliteCore ( fNacl ) {
     serverEKey : undefined ,
   } ;
 
+  var START_SESSION_BYTE = 3 ;
   var START_SESSION_BUILDER = {
     clientEKey : undefined ,
     serverEKey : undefined ,
@@ -37,12 +41,27 @@ function HaliteCore ( fNacl ) {
     connectionId : undefined ,
   };
 
+
+  var SESSION_MESSAGE_BYTE = 4 ;
+  var SESSION_MESSAGE_BUILDER = {
+    senderEKey : undefined , 
+    cryptoBox  : undefined ,
+  } ;
+  
+  var SESSION_MESSAGE_BOXED_DATA_BUILDER = {
+    flags     : undefined ,
+    userBytes : undefined ,
+  } ;
+
+
   var SUCESS                 = 0 ;
   var ERROR_UNKNOWN_CHANNEL  = 1 ;
   var ERROR_DISCONNECTED     = 2 ;
   var ERROR_NOT_DISCONNECTED = 3 ;
   var ERROR_INTERNAL         = 4 ;
   var ERROR_MAX_CHANNELS     = 5 ;
+  var ERROR_MESSAGE_TYPE     = 6 ;
+
 
   var STATE_CLOSED       = 1 ;
   var STATE_DISCONNECTED = 2 ;
@@ -196,6 +215,8 @@ function HaliteCore ( fNacl ) {
     channel.remotePublicEphem  = undefined ;
     channel.senderEphemralPair = undefined ;
     channel.boxKey             = undefined ;
+    channel.nextSenderNonce    = undefined ;
+    channel.nextRemoteNonce    = undefined ;
     channel.channelState       = STATE_DISCONNECTED ;
     channel.lastSentTime       = undefined ;
     channel.lastRecievedTime   = undefined ;
@@ -225,12 +246,8 @@ function HaliteCore ( fNacl ) {
     resultStruct.channelId    = channelId ;
     resultStruct.channelState = STATE_CLOSED ;
 
-    if ( channel.channelState === STATE_CONNECTED ) {
-      var messageResult = SessionMessage( channel, resultStruct, CLOSE_CHANNEL_FLAGS, "" ) ;
-      
-      if ( messageResult !== SUCESS )
-        return ERROR_INTERNAL ;
-    }
+    if ( channel.channelState === STATE_CONNECTED )
+      resultStruct.responseMessage = SessionMessage( channel, CLOSE_CHANNEL_FLAGS, "" ) ;
 
     return SUCESS ;
   }
@@ -238,8 +255,7 @@ function HaliteCore ( fNacl ) {
  
   function getChannelIdentity ( manager, channelId, channelIdentiyStruct ) {
 
-    var channels = manager.channels ;
-    var channel  = channels[ channelId ] ;
+    var channel  = manager.channels[ channelId ] ;
 
     var result ;
 
@@ -265,8 +281,7 @@ function HaliteCore ( fNacl ) {
 
     clearResultStruct( resultStruct ) ;
 
-    var channels = manager.channels ;
-    var channel  = channels[ channelId ] ;
+    var channel  = manager.channels[ channelId ] ;
 
     if ( channel === undefined )
       return ERROR_UNKNOWN_CHANNEL ;
@@ -284,18 +299,33 @@ function HaliteCore ( fNacl ) {
     var nonce = nacl.crypto_box_random_nonce() ;
     var boxed = fNacl.crypto_box_precomputed( toBox, nonce, boxKey ) ;
    
-    REQUEST_SESSION_BUILDER.clientEKey = sesssionKeyPair.boxPk ;
-    REQUEST_SESSION_BUILDER.nonce      = nonce ;
-    REQUEST_SESSION_BUILDER.cryptoBox  = boxed ;
+    REQUEST_KEY_BUILDER.clientEKey = sesssionKeyPair.boxPk ;
+    REQUEST_KEY_BUILDER.nonce      = nonce ;
+    REQUEST_KEY_BUILDER.cryptoBox  = boxed ;
 
-    var message = messages.make_RequestKey( REQUEST_SESSION_BUILDER ) ;
+    var messageLength = compute_RequestKey_length( REQUEST_KEY_BUILDER ) ;
+    var messageBuffer = new ArrayBuffer ( messageLength + 1 ) ;
+    var messageView   = new DataView ( messageBuffer ) ;
+
+    messageView.setUint8( 0, REQUEST_KEY_BYTE ) ;
+
+    var wrote = self.build_RequestKey( messageView, 1, messageLength, REQUEST_KEY_BUILDER ) ;
+
+    if ( wrote !== messageLength )
+      return ERROR_INTERNAL ;
 
     resultStruct.channelId       = channel.channelId ;
     resultStruct.channelState    = STATE_HALF_SESSION ;
-    resultStruct.responseMessage = messages ;
+    resultStruct.responseMessage = new Uint8Array ( messageBuffer ) ;
+
+    incrmentUint8Array( nonce ) ;
+    var remoteNonce = new Uint8Array ( nonce ) ;
+    incrmentUint8Array( remoteNonce ) ;
 
     channel.senderEphemralPair = sesssionKeyPair ;
     channel.boxKey             = boxKey ;
+    channel.nextSenderNonce    = nonce ;
+    channel.nextRemoteNonce    = remoteNonce ;
     channel.channelState       = STATE_HALF_SESSION ;
     channel.lastSentTime       = currentTime ;
     channel.openBytes          = userBytes ;    
@@ -308,8 +338,7 @@ function HaliteCore ( fNacl ) {
 
     clearResultStruct( resultStruct ) ;
 
-    var channels = manager.channels ;
-    var channel  = channels[ channelId ] ;
+    var channel  = manager.channels[ channelId ] ;
 
     if ( channel === undefined )
       return ERROR_UNKNOWN_CHANNEL ;
@@ -318,289 +347,89 @@ function HaliteCore ( fNacl ) {
       resultStruct.channelId = channelchannelId ;
       return ERROR_DISCONNECTED ;
     }
-    
-    var message = SessionMessage( channel.boxKey, CLOSE_SESSION_FLAGS, userBytes ) ;
 
+    var message = SessionMessage( channel, CLOSE_SESSION_FLAGS, userBytes ) ;
+
+    channel.senderEphemralPair = undefined ;
+    channel.boxKey             = undefined ;
+    channel.nextSenderNonce    = undefined ;
+    channel.nextRemoteNonce    = undefined ;
+    channel.channelState       = STATE_DISCONNECTED ;
+    channel.lastSentTime       = currentTime ;
+    channel.openBytes          = undefined ;    
+
+    resultStruct.channelId       = channel.channelId ;
+    resultStruct.channelState    = channel.channelState ;
+    resultStruct.responseMessage = message ;
+
+    return SUCESS ;
   }
 
 
-  sendData     ( manager, channelId, currentTime, resultStruct, userBytes ) -> errorCode
+  function sendData ( manager, channelId, currentTime, resultStruct, userBytes ) {
+    clearResultStruct( resultStruct ) ;
 
-  receiveEnvlope ( manager, currentTime, resultStruct, envlopeBytes ) -> errorCode
+    var channel  = manager.channels[ channelId ] ;
 
-  tickChannel ( manager, channelId, currentTime, resultStruct ) -> errorCode
-  tickManager ( manager, currentTime ) -> errorCode ;
+    if ( channel === undefined )
+      return ERROR_UNKNOWN_CHANNEL ;
 
-
-  ////////// envlope builders //////////
-
-  function SessionMessage ( channel.boxKey, flags, userBytes ) {
-    
-  }
-
-}
-  ///////////////////////////////////////////
-
-function HaliteCoreOld ( fNacl, fIdentityKeyPair, fInitTime, fMaxKeyAge ) {
-
-  var STATE_DISCONNECTED    = 0 ;
-  var STATE_REQUESTING_KEY  = 1 ;
-  var STATE_UNAUTHENCATED   = 2 ;
-  var STATE_CONNECTED       = 4 ;
-  var STATE_CLOSING_SESSION = 5 ;
-  var STATE_CLOSING_CHANNEL = 6 ;
-  var STATE_CLOSED          = 7 ;
-
-  var SUCESS                 = 0 ;
-  var ERROR_NO_CHANNEL       = 1 ;
-  var ERROR_NOT_DISCONNECTED = 2 ;
-  var ERROR_NOT_CONNECTED    = 3 ;
-
-  var REQUEST_KEY_BUILDER ;
-  var REQUEST_KEY_RESPONSE_BUILDER ;
-  var REQUEST_KEY_RESPONSE_BOXED_DATA_BUILDER ;
-  var START_SESSION_BUILDER ;
-  var START_SESSION_BOXED_DATA_BUILDER ;
-  var START_SESSION_KEY_VOUCH_BUILDER ;
-
-
-  var self = {} ;
-
-  var messages = convexstruct.messages ;
-
-  var fEphermalKeyCreated ;
-  var fEphermalKeyOutstanding ;
-  var fEphermalKeyPair ;
-  var fEphermalKeyPairIndex ;
-  var fOldEphermalKeyCreated ;
-  var fOldEphermalKeyOutstanding ;
-  var fOldEphermalKeyPair ;
-  var fOldEphermalKeyPairIndex ;
-  var fRotationAge ;
-
-  var fMaxChannelId ;
-  var fFreeChannelIds ;
-
-  var fSessions ;
-  var fChannels ;
-
-  self.createChannel  = createChannel ;
-  self.destroyChannel = destroyChannel ;
-  self.openSession    = openSession ;
-
-  self.closeSession   = closeSession ;
-  self.sendData       = sendData ;
-  self.receiveData    = receiveEnvlope ;
-  self.tick           = tick ;
-
-  init( ) ;
-
-  return self ;
-
-  function init ( ) {
-
-    fRotationAge = fMaxKeyAge / 2 ;
-
-    initEphermalKey( fInitTime ) ;
-    
-    fSessions = { } ;
-    fChannels = { } ;
-
-    fMaxChannelId = 0 ;
-    fFreeChannelIds = [ 0 ] ;
-
-    REQUEST_KEY_BUILDER = {
-      clientEKey : undefined ,
-      nonce      : undefined ,
-      cryptoBox  : undefined ,
-    } ;
-
-    REQUEST_KEY_RESPONSE_BUILDER = {
-      clientEKey : undefined ,
-      nonce      : undefined ,
-      cryptoBox  : undefined ,
-    } ;
-
-    REQUEST_KEY_RESPONSE_BOXED_DATA_BUILDER = {
-      serverEKey : undefined ,
-    } ;
-
-    START_SESSION_BUILDER = {
-      clientEKey : undefined ,
-      serverEKey : undefined ,
-      nonce      : undefined ,
-      cryptoBox  : undefined ,      
-    };
-
-    START_SESSION_BOXED_DATA_BUILDER = {
-      data       : undefined ,
-      clientLKey : undefined ,
-      nonce      : undefined ,
-      cryptoBox  : undefined ,      
-    };
-
-    START_SESSION_KEY_VOUCH_BUILDER = {
-      clientEKey   : undefined ,
-      connectionId : undefined ,
-    };
-
-
-  }
-
-
-  function possiblyRotateKey ( now ) {
-    if ( ( now - fEphermalKeyCreated ) >= fRotationAge )
-      rotateEphermalKey( now ) ;
-  }
-
-
-  function forgetOld ( ) {
-    fOldEphermalKeyCreated = undefined ;
-    fOldEphermalKeyOutstanding = undefined ;
-    fOldEphermalKeyPair = undefined ;
-    fOldEphermalKeyPairIndex = undefined ;
-  }
-
-  function rotateEphermalKey ( now ) {
-    fOldEphermalKeyCreated     = fEphermalKeyCreated ;
-    fOldEphermalKeyOutstanding = fEphermalKeyOutstanding ;
-    fOldEphermalKeyPair        = fEphermalKeyPair ;
-    fOldEphermalKeyPairIndex   = fEphermalKeyPairIndex ;
-
-    initEphermalKey( now ) ;
-  }
-
-  function initEphermalKey ( now ) {
-    fEphermalKeyCreated      = now ;
-    fEphermalKeyPair         = fNacl.crypto_box_keypair( ) ;
-    fEphermalKeyPairIndex    = fNacl.to_hex( fEphermalKeyPair.boxPk ) ;
-  }
-
-
-  function createChannel ( remoteIdentityKey, stateChangeCallbak, consumeCallback, errorCallback ) {
-
-    var channelId ;
-
-    if ( fFreeChannelIds.lenght !== 0 ) 
-      channelId = fFreeChannelIds.pop( ) ;
-
-    else {
-      fMaxChannelId++ ;
-      channelId = fMaxChannelId ;
+    if ( channel.channelState !== STATE_CONNECTED ) {
+      resultStruct.channelId = channelchannelId ;
+      return ERROR_DISCONNECTED ;
     }
 
-    fChannels[ channelId ] = {
-      remoteIdentityKey  : remoteIdentityKey ,
-      stateChangeCallbak : stateChangeCallbak ,
-      consumeCallback    : consumeCallback ,
-      errorCallback      : errorCallback ,
-      lastEphermalKeyId  : undefined ,
-      // session info
-      state        : STATE_DISCONNECTED ,
-      sentTime     : undefined ,
-      receivedTime : undefined ,
-      keyPair      : undefined ,
-      remoteKey    : undefined ,
-      boxKey       : undefined ,
-      lastNonce    : undefined ,
-      lastSequance : undefined ,
-      messageCount : undefined ,
-    } ;
+    var message = SessionMessage( channel, EMPTY_FLAGS, userBytes ) ;
 
-    return channelId ;
+    channel.lastSentTime = currentTime ;
+
+    resultStruct.channelId       = channel.channelId ;
+    resultStruct.channelState    = channel.channelState ;
+    resultStruct.responseMessage = message ;
+
+    return SUCESS ;
   }
 
 
-  function destroyChannel ( channelId ) {
-    // BOOG need to actually send message and wait for response
+  function receiveEnvlope ( manager, currentTime, resultStruct, envlopeBytes ) {
     var result ;
 
-    if ( fChannels[ channelId ] === undefined ) 
-      result = false ;
+    var typeByte = envlopeBytes[ 0 ] ;
+
+    var envlopeView = new DataView (
+      envlopeBytes.buffer, 
+      envlopeBytes.byteOffset + 1, 
+      envlopeBytes.byteLength - 1 
+      ) ;
+
+    if ( typeByte === REQUEST_KEY_BYTE ) 
+      result = processRequestKey( manager, envlopeView, currentTime, resultStruct ) ;
+
+    else if ( typeByte === REQUEST_KEY_RESPONSE_BYTE ) 
+      processRequestKeyResponce( manager, envlopeView, currentTime, resultStruct ) ;
+
+    else if ( typeByte === START_SESSION_BYTE  ) ;
+
+    else if ( typeByte === SESSION_MESSAGE_BYTE  ) ;
 
     else {
-      result = true ;
-      fChannels[ channelId ] = undefined ;
-      fFreeChannelIds.unshift( channelId ) ;
+      result = ERROR_MESSAGE_TYPE ;
     }
 
     return result ;
   }
 
 
-  function openSession ( channelId, now, result ) {
+  /*
+    tickChannel ( manager, channelId, currentTime, resultStruct ) -> errorCode
+    tickManager ( manager, currentTime ) -> errorCode ;
+  */
 
-    var channelInfo = fChannels[ channelId ] ;
+  ////////// messages processors //////////
 
-    if ( channelInfo === undefined ) {
-      result.code  = ERROR_NO_CHANNEL  ;
-      result.value = undefined ;
-      return ;
-    }
+  function processRequestKey ( manager, requestKeyMessage, currentTime, resultStruct ) {
 
-    if ( channelInfo.state !== STATE_DISCONNECTED ) {
-      result.code  = ERROR_NOT_DISCONNECTED  ;
-      result.value = undefined ;
-      return ;
-    }
-
-    var serverIdentityKey = channelInfo.remoteIdentityKey ;
-
-    var sesssionKeyPair = fNacl.crypto_box_keypair( ) ;
-
-    var boxKey = fNacl.crypto_box_precompute( serverIdentityKey, sesssionKeyPair.boxSk ) ;
-
-    var sessionIndex = fNacl.to_hex( sesssionKeyPair.boxPk ) ;
-
-    fSessions[ sessionIndex ] = channelId ;
-
-    channelInfo.state        = STATE_REQUESTING_KEY ;
-    channelInfo.keyPair      = sesssionKeyPair ;
-    channelInfo.boxKey       = boxKey ;
-    channelInfo.sentTime     = now ;
-    channelInfo.receivedTime = undefined ;
-
-    var toBox = new Uint8Array ( 32 ) ; // Padding
-    var nonce = nacl.crypto_box_random_nonce() ;
-    var boxed = fNacl.crypto_box_precomputed( toBox, nonce, boxKey ) ;
-   
-    REQUEST_SESSION_BUILDER.clientEKey = fEphermalKeyPair.boxPk ;
-    REQUEST_SESSION_BUILDER.nonce      = nonce ;
-    REQUEST_SESSION_BUILDER.cryptoBox  = boxed ;
-
-    var message = messages.make_RequestKey( REQUEST_SESSION_BUILDER ) ;
-
-    result.code  = SUCESS ;
-    result.value = messages ;
-
-    return ;
-  }
-
-
-  function closeSession ( connectionId, now, result ) {
-
-    var channelInfo = fChannels[ channelId ] ;
-
-    if ( channelInfo === undefined ) {
-      result.code  = ERROR_NO_CHANNEL  ;
-      result.value = undefined ;
-      return ;
-    }
-
-    if ( channelInfo.state === STATE_DISCONNECTED ) {
-      result.code  = ERROR_NOT_CONNECTED  ;
-      result.value = undefined ;
-      return ;
-    }
-
-    
-
-  }
-
-
-  function processRequestKey ( requestKeyMessage, now, result ) {
-
-    possiblyRotateKey( now ) ;
+    possiblyRotateKey( manager, currentTime ) ;
 
     var clientEphermalPKey = messages.RequestKey_read_clientEKey( requestKeyMessage, 0 ) ;
     var requestNonce       = messages.RequestKey_read_nonce( requestKeyMessage, 0 ) ;
@@ -612,7 +441,7 @@ function HaliteCoreOld ( fNacl, fIdentityKeyPair, fInitTime, fMaxKeyAge ) {
     var unBoxed = fNacl.crypto_box_open_precomputed( cryptoBox, requestNonce, boxKey ) ;
 
     REQUEST_KEY_RESPONSE_BOXED_DATA_BUILDER.serverEKey = fEphermalKeyPair.boxPk ;
-
+    
     var toBox = messages.make_RequestKeyResponseBoxedData( REQUEST_KEY_RESPONSE_BOXED_DATA_BUILDER ) ;
     var nonce = nacl.crypto_box_random_nonce() ;
     var boxed = fNacl.crypto_box_precomputed( toBox, nonce, boxKey ) ;
@@ -620,20 +449,34 @@ function HaliteCoreOld ( fNacl, fIdentityKeyPair, fInitTime, fMaxKeyAge ) {
     REQUEST_KEY_RESPONSE_BUILDER.clientEKey = clientEphermalPKey ;
     REQUEST_KEY_RESPONSE_BUILDER.nonce      = nonce ;
     REQUEST_KEY_RESPONSE_BUILDER.cryptoBox  = boxed ;
+    
 
-    var messages = messages.make_RequestKeyResponse( REQUEST_KEY_RESPONSE_BUILDER ) ;
+    var messageLength = compute_RequestKeyResponse_length( REQUEST_KEY_RESPONSE_BUILDER ) ;
+    var messageBuffer = new ArrayBuffer ( messageLength + 1 ) ;
+    var messageView   = new DataView ( messageBuffer ) ;
 
-    result.code  = SUCESS ;
-    result.value = messages ;
+    messageView.setUint8( 0, REQUEST_KEY_RESPONSE_BYTE ) ;
 
-    return ;
+    var wrote = self.build_RequestKeyResponse( messageView, 1, messageLength, REQUEST_KEY_RESPONSE_BUILDER ) ;
+
+    if ( wrote !== messageLength )
+      return ERROR_INTERNAL ;
+
+    resultStruct.channelState    = STATE_CLOSED ;
+    resultStruct.responseMessage = new Uint8Array ( messageBuffer ) ;
+
+
+    return SUCESS ;
   }
 
 
-  function processRequestKeyResponce ( requestKeyMessageResponce, now, result ) {
+  function processRequestKeyResponce ( manager, requestKeyMessageResponce, currentTime, resultStruct ) {
+
     var clientEphermalPKey = messages.RequestKeyResponse_read_clientEKey( requestKeyMessageResponce, 0 ) ;
     var requestNonce       = messages.RequestKeyResponse_read_nonce( requestKeyMessageResponce, 0 ) ;
     var cryptoBox          = messages.RequestKeyResponse_read_cryptoBox( requestKeyMessageResponce, 0 ) ;
+
+    // BOOG stoped working hear... code below is incorrect.
 
     var sessionIndex = fNacl.to_hex( clientEphermalPKey ) ;
     var channelId    = fSessions[ sessionIndex ] ;
@@ -657,6 +500,47 @@ function HaliteCoreOld ( fNacl, fIdentityKeyPair, fInitTime, fMaxKeyAge ) {
     return channelId ;
   }
 
+
+  function processRequestStartSession ( nonce, startSessionMessage ) {
+
+    var clientEphermalKey = messages.StartSession_read_clientEKey( startSessionMessage, 0 ) ;
+    var serverEphermalKey = messages.StartSession_read_serverEKey( startSessionMessage, 0 ) ;
+    var startNonce        = messages.StartSession_read_nonce( startSessionMessage, 0 ) ;
+    var cryptoBox         = messages.StartSession_read_cryptoBox( startSessionMessage, 0 ) ;
+
+    var sessionKeyPair ;
+    var serverKeyIndex = fNacl.to_hex( serverEphermalKey ) ;
+
+    if ( serverKeyIndex === fEphermalKeyPairIndex )
+      sessionKeyPair = fEphermalKeyPair ;
+
+    else if ( serverKeyIndex === fOldEphermalKeyPairIndex )
+      sessionKeyPair = fOldEphermalKeyPair ;
+
+    else
+      return undefined ;
+
+    var sessionIndex = fNacl.to_hex( clientEphermalKey ) ;
+
+    if ( fSessions[ sessionIndex ] !== undefined )
+      return undefined ;
+
+    var boxKey = fNacl.crypto_box_precompute( clientEphermalKey, sesssionKeyPair.boxSk ) ;
+
+    var boxData = fNacl.crypto_box_open_precomputed( cryptoBox, startNonce, boxKey ) ;
+
+    // bed time stopping hear...
+
+    fSessions[ sessionIndex ] = { 
+      startTime      : new Date ( ) ,
+      acked          : true , // With out cookies this is kinda a lie.
+      serverIdentity : serverIdentityKey , 
+      serverEphermal : undefined ,
+      sessionBoxKey  : boxKey ,
+      connectionId   : connectionId ,
+    } ;
+
+  }
 
   function makeStartSession ( nonce, serverIdentityKey, serverEphermalKey, connectionId, data ) {
 
@@ -701,46 +585,60 @@ function HaliteCoreOld ( fNacl, fIdentityKeyPair, fInitTime, fMaxKeyAge ) {
     return startSessionMessage ;
   }
 
-  
-  function processRequestStartSession ( nonce, startSessionMessage ) {
+  ////////// envlope builders //////////
 
-    var clientEphermalKey = messages.StartSession_read_clientEKey( startSessionMessage, 0 ) ;
-    var serverEphermalKey = messages.StartSession_read_serverEKey( startSessionMessage, 0 ) ;
-    var startNonce        = messages.StartSession_read_nonce( startSessionMessage, 0 ) ;
-    var cryptoBox         = messages.StartSession_read_cryptoBox( startSessionMessage, 0 ) ;
+  function SessionMessage ( channel, flags, userBytes ) {
 
-    var sessionKeyPair ;
-    var serverKeyIndex = fNacl.to_hex( serverEphermalKey ) ;
+    var boxKey    = channel.boxKey ;
+    var nonce     = channel.nextSenderNonce ;
+    var senderKey = channel.senderPublicIdent ;
 
-    if ( serverKeyIndex === fEphermalKeyPairIndex )
-      sessionKeyPair = fEphermalKeyPair ;
 
-    else if ( serverKeyIndex === fOldEphermalKeyPairIndex )
-      sessionKeyPair = fOldEphermalKeyPair ;
+    SESSION_MESSAGE_BOXED_DATA_BUILDER.flags     = flags ;
+    SESSION_MESSAGE_BOXED_DATA_BUILDER.userBytes = userBytes ;
 
-    else
-      return undefined ;
+    var toBox = messages.make_SessionMessageBoxedData( SESSION_MESSAGE_BOXED_DATA_BUILDER ) ;
 
-    var sessionIndex = fNacl.to_hex( clientEphermalKey ) ;
+    var boxed = fNacl.crypto_box_precomputed( toBox, nonce, boxKey ) ;
 
-    if ( fSessions[ sessionIndex ] !== undefined )
-      return undefined ;
+    incrmentUint8Array( channel.nextSenderNonce ) ;
 
-    var boxKey = fNacl.crypto_box_precompute( clientEphermalKey, sesssionKeyPair.boxSk ) ;
+    SESSION_MESSAGE_BUILDER.senderEKey = senderKey;
+    SESSION_MESSAGE_BUILDER.cryptoBox  = boxed ;
 
-    var boxData = fNacl.crypto_box_open_precomputed( cryptoBox, startNonce, boxKey ) ;
 
-    // bed time stopping hear...
+    var messageLength = compute_RequestKey_length( SESSION_MESSAGE_BUILDER ) ;
+    var messageBuffer = new ArrayBuffer ( messageLength + 1 ) ;
+    var messageView   = new DataView ( messageBuffer ) ;
 
-    fSessions[ sessionIndex ] = { 
-      startTime      : new Date ( ) ,
-      acked          : true , // With out cookies this is kinda a lie.
-      serverIdentity : serverIdentityKey , 
-      serverEphermal : undefined ,
-      sessionBoxKey  : boxKey ,
-      connectionId   : connectionId ,
-    } ;
+    messageView.setUint8( 0, SESSION_MESSAGE_BYTE ) ;
 
+    var wrote = self.build_RequestKey( messageView, 1, messageLength, SESSION_MESSAGE_BUILDER ) ;
+
+    if ( wrote !== messageLength )
+      return ERROR_INTERNAL ;
+
+    return new Uint8Array ( messageBuffer ) ;
   }
 
-} ;
+
+  //////// uitility ////////
+
+  function incrmentUint8Array ( buffer ) {
+    // little endian
+    for ( var i = 0 ; i < buffer.lenght ; i++ ) {
+
+      if ( buffer[ i ] === 255 )
+        buffer[ i ] = 0 ;
+
+      else {
+        buffer[ i ] += 1 ;
+        break ;
+      }
+
+    }
+  }
+    
+
+}
+
