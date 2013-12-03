@@ -1,9 +1,16 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
+# external imports
 import sys
 import json
 import binascii
 import sha
+import os
+import argparse
+
+# internal imports
+from printc  import printC
+from printjs import printJS
 
 
 VERSION_KEY = "version"
@@ -15,8 +22,6 @@ TYPE_ONE = 1
 TYPE_TWO = 2
 
 OFFSET_SIZE = 4
-
-
 
 typeDb = {}
 
@@ -445,36 +450,29 @@ def debugPrint ( typeDb ) :
                 print "    field %s\tof type %s\tis repeated %s" % \
                       ( field.getName(), field.getType().getName(), field.isRepeated() )
 
-from printc  import printC
-from printjs import printJS
-import os
+def main():
 
-USAGE = """
-%s {c,js} message-type1.json [ message-type2.json ... ]
-"""
-
-def main ( args ) :
-
-    if len( args ) < 3 :
-        error( USAGE % ( args[ 0 ], ) )
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s','--schema-files', dest='schema_files', nargs='+', help="protocol message schema in JSON")
+    parser.add_argument('-m','--mustache-file', dest='mustache', help="Mustache template file for our protocol message builder")
+    parser.add_argument('-o','--output-lang', dest='output', help="output language")
+    args = parser.parse_args()
 
     initBuiltInTypes( )
-    output = args[ 1 ]
-    paths  = args[ 2: ]
+    buildDataTypes( args.schema_files )
 
-    buildDataTypes( paths )
-
-    for typeObj in typeDb.values( ) :
+    for typeObj in typeDb.values():
         typeObj.compute( )
 
     #debugPrint( typeDb )
-    if output == "c":
-        printC( typeDb )
+    if args.output == "c":
+        printC( typeDb, args.mustache )
 
-    elif output == "js":
+    elif args.output == "js":
         printJS( typeDb )
 
     else:
-        error( "unknown ouput type %r" % ( ouput, ) )
+        error( "unknown ouput type %r" % ( args.ouput, ) )
 
-main( sys.argv )
+if __name__ == '__main__':
+    main()
