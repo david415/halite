@@ -1,0 +1,315 @@
+{{{header}}}
+
+{{#composite_typedef}}
+typedef struct {{name}}_ {} {{name}} ;
+static const uint64_t {{name}}_tag =0x{{tag}} ;
+{{/composite_typedef}}
+
+{{#composite_struct_def}}
+struct {{name}}_builder ;
+{{/composite_struct_def}}
+
+{{#composite_builder_structs}}
+{{#structs}}
+struct {{name}}_builder { {{#struct_fields}}{{#is_composite}}struct {{typeName}}_builder*{{array}} {{field}}
+;{{/is_composite}}{{^is_composite}}
+  {{type}} {{array}}{{field}} ;{{/is_composite}}{{#has_length}}
+  size_t {{field}}_length ;{{/has_length}}{{/struct_fields}}
+} ;
+
+static inline size_t build_{{setter_sig_name}} ( char* data, size_t length, struct {{setter_sig_name}}_builder* builder_data ) ;
+
+size_t static inline compute_{{setter_sig_name}}_length ( struct {{setter_sig_name}}_builder* builder ) ;
+
+{{/structs}}
+{{/composite_builder_structs}}
+
+
+{{#type_function_sets}}
+/***** type {{name}} *****/
+
+{{#is_fixed}}
+size_t static inline {{message}}_length ( {{message}}* data ) {
+    return {{width}} ;
+}
+
+size_t static inline compute_{{message}}_length ( struct {{message}}_builder* builder ) {
+    return {{width}} ;
+}
+{{/is_fixed}}
+{{^is_fixed}}
+size_t static inline {{message}}_length ( {{message}}* data ) {
+    return (size_t)((uint32_t*)data)[ 0 ] ;
+}
+
+size_t static inline compute_{{message}}_length ( struct {{message}}_builder* builder ) {
+    size_t length = {{width}} ;
+{{#field_lengths}}
+{{#is_repeated}}
+    size_t {{message}}_length = builder->{{message}}_length ;
+
+    for ( int i = 0 ; i < {{message}}_length ; i++ ) {
+        if ( builder->{{message}}[i] != NULL )
+            length += compute_{{type}}_length( builder->{{message}}[i] ) ;
+    }
+{{/is_repeated}}
+{{#is_composite}}
+    if ( builder->{{message}} != NULL ) length += compute_{{message}}_length( builder->{{message}} ) ;
+{{/is_composite}}
+{{#default}}
+    length += builder->{{message}}_length ; 
+{{/default}}
+    return length;
+}
+{{/field_lengths}}
+{{/is_fixed}}
+
+{{#fixed_getter_sets}}
+
+static inline {{type}} {{message}}_read_{{field}} ( {{message}}* data ) {
+    return ({{use}}{{type}}{{use}})( ((char*)data) + {{offset}} ) ;
+}
+
+static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
+    return {{width}};
+}
+
+static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
+    return {{offset}} + {{width}};
+}
+{{/fixed_getter_sets}}
+
+{{#first_repeated_getter}}
+static inline size_t {{message}}_end_{{field}} ( {{message}}* data, uint32_t index ) {
+    size_t   message_length = {{message}}_length( data ) ;
+    uint32_t count          = *(uint32_t*)( ((char*)data) + {{offset}} ) ;
+
+    if ( index >= count )
+        return 0 ;
+
+    if ( ( {{offset}} + ( index * sizeof( uint32_t ) ) + sizeof( uint32_t ) ) > message_length )
+        return 0 ;
+        
+    return (size_t)( ((uint32_t*)(((char*)data) + {{offset}} ))[ index ] ) ;
+}
+
+
+static inline size_t {{message}}_start_{{field}} ( {{message}}* data, uint32_t index ) {
+    size_t   result ;
+    size_t   message_length = {{message}}_length( data ) ;
+    uint32_t count          = *(uint32_t*)( ((char*)data) + {{offset}} ) ;
+
+    if ( index >= count )
+        return 0 ;
+
+    if ( ( {{offset}} + ( index * sizeof( uint32_t ) ) + sizeof( uint32_t ) ) > message_length )
+        return 0 ;
+
+    if ( index == 0 )
+        result = {{offset}} + sizeof( uint32_t ) + ( sizeof( uint32_t ) * count ) ;
+
+    else
+        result = ((uint32_t*)(((char*)data) + {{offset}} ))[ index - 1 ] ;
+
+    return result ;
+}
+
+
+static inline {{type}} {{message}}_read_{{field}} ( {{message}}* data, uint32_t index ) {
+    size_t message_length = {{message}}_length( data ) ;
+    size_t field_end      = {{message}}_end_{{field}}( data, index ) ;
+    size_t field_start    = {{message}}_start_{{field}}( data, index ) ;
+
+    if ( (field_end > message_length) || (field_start == 0) || (field_end == 0) )
+        return NULL ;
+
+   return {{use}}({{type}}{{use}})( ((char*)data) + field_start ) ;
+}
+
+
+static inline size_t {{message}}_length_{{field}} ( {{message}}* data, uint32_t index ) {
+    size_t field_end   = {{message}}_end_{{field}}( data, index ) ;
+    size_t field_start = {{message}}_start_{{field}}( data, index ) ;
+
+    if ( field_start == 0 || field_end == 0 )
+        return 0 ;
+
+    return field_end - field_start ;
+}
+{{/first_repeated_getter}}
+
+{{#first_tagged_getter}}
+static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
+    return (size_t)( ((uint32_t*)data)[ {{index}} ] );
+}
+
+
+static inline char* {{message}}_read_{{field}} ( {{message}}* data ) {
+    size_t message_length = {{message}}_length( data ) ;
+    size_t field_end      = {{message}}_end_{{field}}( data ) ;
+
+    if ( field_end > message_length )
+        return NULL ;
+
+    return  ((char*)data) + {{offset}} + sizeof( uint64_t ) ;
+}
+
+
+static inline uint64_t {{message}}_readTag_{{field}} ( {{message}}* data ) {
+    return *(uint64_t*)( ((char*)data) + {{offset}} ) ;
+}
+
+
+static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
+    return (size_t)( ((uint32_t*)data)[ {{index}} ] - {{offset}} );
+}
+
+{{/first_tagged_getter}}
+
+{{#first_var_getter}}
+
+static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
+    return (size_t)( ((uint32_t*)data)[ {{index}} ] );
+}
+
+static inline %(type)s {{message}}_read_{{field}} ( {{message}}* data ) {
+    size_t message_length = {{message}}_length( data ) ;
+    size_t field_end      = {{message}}_end_{{field}}( data ) ;
+
+    if ( field_end > message_length )
+        return NULL ;
+
+    return {{use}}(%(type)s{{use}})( ((char*)data) + %(offset)d ) ;
+}
+
+static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
+    return (size_t)( ((uint32_t*)data)[ {{index}} ] - %(offset)d );
+}
+
+{{/first_var_getter}}
+
+
+{{#repeated_getter}}
+static inline size_t {{message}}_end_{{field}} ( {{message}}* data, uint32_t index ) {
+    size_t   message_length = {{message}}_length( data ) ;
+    uint32_t field_start    = ((uint32_t*)data)[ {{index}} + 1 ] ;
+    uint32_t count          = *(uint32_t*)( ((char*)data) + field_start ) ;
+
+    if ( index >= count )
+        return 0 ;
+
+    if ( ( field_start + ( index * sizeof( uint32_t ) ) + sizeof( uint32_t ) ) > message_length )
+        return 0 ;
+        
+    return (size_t)( ((uint32_t*)(((char*)data) + field_start ))[ index ] ) ;
+}
+
+
+static inline size_t {{message}}_start_{{field}} ( {{message}}* data, uint32_t index ) {
+    size_t   result ;
+    size_t   message_length = {{message}}_length( data ) ;
+    uint32_t field_start    = ((uint32_t*)data)[ {{index}} + 1 ] ;
+    uint32_t count          = *(uint32_t*)( ((char*)data) + field_start ) ;
+
+    if ( index >= count )
+        return 0 ;
+
+    if ( ( field_start + ( index * sizeof( uint32_t ) ) + sizeof( uint32_t ) ) > message_length )
+        return 0 ;
+
+
+    if ( index == 0 )
+        result = field_start + sizeof( uint32_t ) + ( sizeof( uint32_t ) * count ) ;
+
+    else
+        result = ((uint32_t*)(((char*)data) + field_start ))[ index - 1 ] ;
+
+    return result ;
+}
+
+
+static inline {{type}} {{message}}_read_{{field}} ( {{message}}* data, uint32_t index ) {
+    size_t message_length = {{message}}_length( data ) ;
+    size_t field_end      = {{message}}_end_{{field}}( data, index ) ;
+    size_t field_start    = {{message}}_start_{{field}}( data, index ) ;
+
+    if ( field_end > message_length || field_start == 0 || field_end == 0 )
+        return NULL ;
+
+   return {{use}}({{type}}{{use}})( ((char*)data) + field_start ) ;
+}
+
+
+static inline size_t {{message}}_length_{{field}} ( {{message}}* data, uint32_t index ) {
+    size_t field_end   = {{message}}_end_{{field}}( data, index ) ;
+    size_t field_start = {{message}}_start_{{field}}( data, index ) ;
+
+    if ( field_start == 0 || field_end == 0 )
+        return 0 ;
+
+    return field_end - field_start ;
+}
+{{/repeated_getter}}
+
+
+{{#tagged_getter}}
+static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
+    return (size_t)( ((uint32_t*)data)[ {{index}} ] );
+}
+
+static inline char* {{message}}_read_{{field}} ( {{message}}* data ) {
+    size_t message_length = {{message}}_length( data ) ;
+    size_t field_end      = {{message}}_end_{{field}}( data ) ;
+
+    if ( field_end > message_length )
+        return NULL ;
+
+    return ((char*)data) + sizeof(uint64_t) + ((uint32_t*)data)[ {{index}} + 1 ] ;
+}
+
+static inline uint64_t {{message}}_readTag_{{field}} ( {{message}}* data ) {
+    return *(uint64_t*)( ((char*)data) + ((uint32_t*)data)[ {{index}} + 1 ] );
+}
+
+static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
+    return (size_t)( ((uint32_t*)data)[ {{index}} ] - ((uint32_t*)data)[ {{index}} + 1 ] );
+}
+{{/tagged_getter}}
+
+
+{{#var_getter}}
+static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
+    return (size_t)( ((uint32_t*)data)[ {{index}} ] );
+}
+
+static inline {{type}} {{message}}_read_{{field}} ( {{message}}* data ) {
+    size_t message_length = {{message}}_length( data ) ;
+    size_t field_end      = {{message}}_end_{{field}}( data ) ;
+
+    if ( field_end > message_length )
+        return NULL ;
+
+    return {{use}}({{type}}{{use}})( ((char*)data) + ((uint32_t*)data)[ {{index}} + 1 ]  ) ;
+}
+
+static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
+    return (size_t)( ((uint32_t*)data)[ {{index}} ] - ((uint32_t*)data)[ {{index}} + 1 ] );
+}
+{{/var_getter}}
+
+static inline size_t build_{{message}} ( char* data, size_t length, struct {{message}}_builder* builder_data ) {
+
+{{#getter_fields}}
+
+{{#has_composite}}
+    size_t wrote ;
+{{/has_composite}}
+
+    size_t current_offset = {{width}} ;
+    if ( length < {{width}} )
+        return 0 ;
+
+
+
+
+{{/type_functions}}

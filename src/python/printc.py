@@ -480,6 +480,17 @@ def updateFromField ( baseDict, field ) :
     baseDict[ "field"    ] = field.getName()
 
 
+def getFieldDict( name, currentOffset, field, varIndex ):
+    baseDict            = {}
+    baseDict['message'] = name
+    baseDict['offset']  = currentOffset
+    baseDict['index']   = varIndex
+    baseDict['width']   = 0
+    updateFromField( baseDict, field )
+    if field.isFixed() :
+        baseDict['width'] = field.getType().getFixedWidth()
+    return baseDict
+
 def printFieldFormat ( name, currentOffset, field, varIdex, formatString ) :
 
     width = 0
@@ -496,199 +507,173 @@ def printFieldFormat ( name, currentOffset, field, varIdex, formatString ) :
     return currentOffset + width
 
 
+import pystache
+
 def printC ( typeDb ) :
+    renderer = pystache.Renderer()
 
-    print HEADER
+    stache_data = {
+        'header': HEADER
+        }
 
-    # first go though and make us types
-    # so that we can have the compiler
-    # check for type error for the user.
-    for name, info in typeDb.items() :
-
-        if info.isComposite( ) :
-            print "typedef struct %s_ {} %s ;" % ( name, name )
-            print "static const uint64_t %s_tag = 0x%s ;" % ( name, info.getTag( ) )
-
-
-    print ""
+    composite_typedef = []
 
     for name, info in typeDb.items() :
         if info.isComposite( ) :
-            print "struct %s_builder ;" % ( name, )
+            composite_typedef.append( { "name": name, "tag" : info.getTag( ) } )
 
-    print ""
-    
+    stache_data['composite_typedef'] = composite_typedef
+
+    composite_struct_def = []
+
+    for name, info in typeDb.items() :
+        if info.isComposite( ) :
+            composite_struct_def.append( { "name" : name } )
+
+    stache_data['composite_struct_def'] = composite_struct_def
+
+    composite_builder_structs = []
+
     for name, info in typeDb.items() :
 
         if info.isComposite( ) :
-
-            print "struct %s_builder {" % ( name, )
-
+            composite_builder_struct  = {}
+            composite_builder_struct['name']  = name
             varIndex      = len( info.getVar( ) ) - 1
             currentOffset = OFFSET_SIZE * len( info.getVar( ) )
 
+            fields = []
+
             for field in info.getFields( ) :
-                keys = {}
+                keys          = {}
+                struct_field = {}
 
                 if field.isRepeated() :
-                    keys[ 'array' ] = "*"
-
+                    struct_field[ 'array' ] = "*"
                 else :
-                    keys[ 'array' ] = ""
-                
+                    struct_field[ 'array' ] = ""
+
                 updateFromField( keys, field )
+                struct_field['field'] = keys['field']
 
                 if field.isComposite() or field.getType( ).isDynamic( ):
-                    print "  struct %(typeName)s_builder*%(array)s %(field)s ;" % keys
-
-                else :
-                    print "  %(type)s %(array)s%(field)s ;" % keys
-                    
+                    struct_field['is_composite'] = True
+                    struct_field['typeName']     = keys['typeName']
+                else:
+                    struct_field['type']          = keys['type']
                 if ( not field.isFixed() ) and (
                     not (
                         ( field.isComposite() and not field.isRepeated() ) \
                         or field.getType().isDynamic( ) \
                         )) :
-                    print "  size_t %(field)s_length ;" % keys
-                
-            print "} ;"
+                        struct_field['has_length'] = True
 
-            print SETTER_SIG         % { "message" : name, "end" : ";" }
-            print COMPUTE_LENGTH_SIG % { "message" : name, "end" : ";" }
+                fields.append(struct_field)
 
+            composite_builder_struct['struct_fields']   = fields
+            composite_builder_struct['setter_sig_name'] = name
+
+        if len(composite_builder_struct) > 0:
+            composite_builder_structs.append(composite_builder_struct)
+
+    stache_data['composite_builder_structs'] = {'structs':composite_builder_structs}
+
+    stache_data['type_functions'] = getTypeFunctions(typeDb)
+
+    print renderer.render_path('/home/dawuud/projects/halite-bitbucket-david415/src/messages/halite-c.mustache', stache_data)
+
+
+
+def getTypeFunctions(typeDb):
+
+    type_function_sets = []
     for name, info in typeDb.items() :
 
-        if info.isComposite( ) :
+        if not info.isComposite( ) :
+            continue
 
-            hasComposite = False
+        type_function_set          = {}
+        type_function_set['has_composite'] = False
+        type_function_set['message']  = info.getName()
+        type_function_set['width'] = info.getFixedWidth( )
+        varFields                  = info.getVar( )
 
-            print "/***** type %s *****/" % ( info.getName(), )
-
-            varFields = info.getVar( )
-
-            if info.isFixed() :
-                print GET_FIXED_LENGTH     % { "message" : name, "width" : info.getFixedWidth( ) }
-                print COMPUTE_FIXED_LENGTH % { "message" : name, "width" : info.getFixedWidth( ) }
-
-            else :
-                print GET_VAR_LENGTH % { "message" : name, "width" : info.getFixedWidth( ) }
-
-                print COMPUTE_LENGTH_SIG % { "message" : name, "end" : "{" }
-
-                print "    size_t length = %d ;" % ( info.getFixedWidth( ), )
-
-                for field in varFields :
-
-                    if field.isRepeated() :
-                        print COMPUTE_REPETED_LENGTH % \
-                              { 'fieldName' : field.getName( ), 'fieldType' : field.getType( ).getName( ) }                        
-                    elif field.isComposite( ) or field.getType( ).isDynamic( ) :
-                        print "    if ( builder->%s != NULL ) length += compute_%s_length( builder->%s ) ;" % \
-                              ( field.getName( ), field.getType( ).getName( ), field.getName( ) )
-                    else :
-                        print "    length += builder->%s_length ; " % ( field.getName(), )
-
-                print "    return length;\n}"
-
-            varIndex      = len( info.getVar( ) ) - 1
-            currentOffset = OFFSET_SIZE * len( info.getVar( ) )
-
-            for field in info.getFixed( ) :
-                currentOffset = printFieldFormat( name, currentOffset, field, varIndex, FIXED_GETTER )
-
-
-            if len( varFields ) > 0 :
-                if varFields[ 0 ].isRepeated( ) :
-                    currentOffset = printFieldFormat( name, currentOffset, varFields[ 0 ], varIndex, FIRST_REPETED_GETTER )
-
-                elif varFields[ 0 ].getType( ).isDynamic( ):
-                    currentOffset = printFieldFormat( name, currentOffset, varFields[ 0 ], varIndex, FIRST_TAGGED_GETTER )
-
-                else:
-                    currentOffset = printFieldFormat( name, currentOffset, varFields[ 0 ], varIndex, FIRST_VAR_GETTER )
-
-                varIndex -= 1
-
-            for field in varFields[ 1 : ] :                
-                if field.isRepeated( ) :
-                    currentOffset = printFieldFormat( name, currentOffset, field, varIndex, REPETED_GETTER )
-
-                elif field.getType( ).isDynamic( ):
-                    currentOffset = printFieldFormat( name, currentOffset, field, varIndex, TAGGED_GETTER )
-                    
-                else:
-                    currentOffset = printFieldFormat( name, currentOffset, field, varIndex, VAR_GETTER )
-                    
-                varIndex -= 1
-
-
-            varIndex      = len( varFields ) - 1
-            currentOffset = OFFSET_SIZE * len( varFields )
-
+        if info.isFixed() :
+            type_function_set['is_fixed'] = True
+        else:
+            fields = []
             for field in varFields :
-                if field.isComposite() == True or field.getType( ).isDynamic() == True :
-                    hasComposite = True #BOOG do I need this for repeted?
-                    
-            print SETTER_SIG % { "message" : name, "end" : "{" }
-
-            if ( hasComposite == True ) :
-                print "    size_t wrote ;"
-
-            print "    size_t current_offset = %d ;" % ( info.getFixedWidth( ), )
-            
-
-            print FIXED_LENGTH_CHECK % ( info.getFixedWidth( ), )
-    
-            for field in info.getFixed( ) :
-                if field.isComposite( ):
-                    currentOffset = printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_COMPOSITE_FIXED )
+                varField = {}
+                if field.isRepeated() :
+                    varField['is_repeated'] = True
+                elif field.isComposite( ) or field.getType( ).isDynamic( ) :
+                    varField['is_composite'] = True
                 else:
-                    currentOffset = printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_FIXED )
+                    varField['default'] = True
+                    varField['message'] = field.getName( )
+                    varField['type'] = field.getType( ).getName( )
+                    fields.append(varField)
+                type_function_set['field_lengths'] = fields
+        
+        varIndex      = len( info.getVar( ) ) - 1
+        currentOffset = OFFSET_SIZE * len( info.getVar( ) )
+
+        fixed_getter_sets = []
+        for field in info.getFixed( ) :
+
+            fixed_getters = getFieldDict(name, currentOffset, field, varIndex)
+            currentOffset = currentOffset + fixed_getters['width']
+            fixed_getter_sets.append(fixed_getters)
+
+        if len(fixed_getter_sets) > 0:
+            type_function_set['fixed_getter_sets'] = fixed_getter_sets
+
+        if len( varFields ) > 0 :
+            if varFields[ 0 ].isRepeated( ) :
+                type_function_set['first_repeated_getter'] = getFieldDict(name, currentOffset, varFields[ 0 ], varIndex)
+                currentOffset = currentOffset + type_function_set['first_repeated_getter']['width']
+            elif varFields[ 0 ].getType( ).isDynamic( ):
+                type_function_set['first_tagged_getter'] = getFieldDict(name, currentOffset, varFields[ 0 ], varIndex)
+                currentOffset = currentOffset + type_function_set['first_tagged_getter']['width']
+            else:
+                type_function_set['first_var_getter'] = getFieldDict(name, currentOffset, varFields[ 0 ], varIndex)
+                currentOffset = currentOffset + type_function_set['first_var_getter']['width']
+            varIndex -= 1
+
+        for field in varFields[ 1 : ] :                
+            if field.isRepeated( ) :
+                type_function_set['repeated_getter'] = getFieldDict(name, currentOffset, field, varIndex)
+                currentOffset += type_function_set['repeated_getter']['width']
+            elif field.getType( ).isDynamic( ):
+                type_function_set['tagged_getter'] = getFieldDict(name, currentOffset, field, varIndex)
+                currentOffset += type_function_set['tagged_getter']['width']
+            else:
+                type_function_set['var_getter'] = getFieldDict(name, currentOffset, field, varIndex)
+                currentOffset += type_function_set['var_getter']['width']
+            varIndex -= 1
+
+        varIndex      = len( varFields ) - 1
+        currentOffset = OFFSET_SIZE * len( varFields )
+
+        for field in varFields :
+            if field.isComposit() == True or field.getType( ).isDynamic() == True :
+                type_function_set['has_composite'] = True #BOOG do I need this for repeted?
 
 
-            if len( varFields ) > 0:
-
-                for field in varFields :
-
-                    if field.isRepeated( ) :
-                        printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_REPETED_VAR )
-
-                    elif field.isComposite( ) or field.getType().isDynamic( ):
-                        printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_COMPOSITE_VAR )
-
-                    else :
-                        printFieldFormat( name, currentOffset, field, varIndex, VAR_LENGTH_CHECK )
-                        printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_VAR )
-
-                    
-                    currentOffset = printFieldFormat( name, currentOffset, field, varIndex, SET_END )
-                    varIndex -= 1
-
-            
-            print "\n    return current_offset;\n}\n"
-
-            
-    print TAGGED_FIELD_BUILDER_START
-    
-    for name, info in typeDb.items() :
-
-        if info.isComposite( ) :
-            print TAGGED_FIELD_BUILDER_TYPE % \
-                  { 'tag' : info.getTag() , 'type' : info.getName() }
-
-    print TAGGED_FIELD_BUILDER_END
 
 
 
-    print TAGGED_FIELD_COMPUTER_START
-    
-    for name, info in typeDb.items() :
-
-        if info.isComposite( ) :
-            print TAGGED_FIELD_COMPUTER_TYPE % \
-                  { 'tag' : info.getTag() , 'type' : info.getName() }
-
-    print TAGGED_FIELD_COMPUTER_END
 
 
-    print FOOTER
+
+        type_function_sets.append(type_function_set)
+
+    # DEBUG
+    #import json
+    #print "\n\n"
+    #print json.dumps(type_function_sets, indent=2)
+    #print "\n\n"
+
+    return type_function_sets
+
+
