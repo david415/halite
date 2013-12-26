@@ -1,3 +1,4 @@
+
 #ifndef MESSAGE_IMPLMENTATION_H
 #define MESSAGE_IMPLMENTATION_H
 
@@ -33,15 +34,15 @@ size_t static inline compute_{{setter_sig_name}}_length ( struct {{setter_sig_na
 
 {{/structs}}
 {{/composite_builder_structs}}
-
-
 {{#type_function_sets}}
+
 /***** type {{message}} *****/
 
 {{#is_fixed}}
 size_t static inline {{message}}_length ( {{message}}* data ) {
     return {{width}} ;
 }
+
 
 size_t static inline compute_{{message}}_length ( struct {{message}}_builder* builder ) {
     return {{width}} ;
@@ -53,6 +54,7 @@ size_t static inline {{message}}_length ( {{message}}* data ) {
 }
 
 size_t static inline compute_{{message}}_length ( struct {{message}}_builder* builder ) {
+
     size_t length = {{width}} ;
 {{#field_lengths}}
 {{#is_repeated}}
@@ -69,13 +71,12 @@ size_t static inline compute_{{message}}_length ( struct {{message}}_builder* bu
 {{#default}}
     length += builder->{{message}}_length ; 
 {{/default}}
+{{/field_lengths}}
     return length;
 }
-{{/field_lengths}}
 {{/is_fixed}}
 
 {{#fixed_getter_sets}}
-
 static inline {{type}} {{message}}_read_{{field}} ( {{message}}* data ) {
     return ({{use}}{{type}}{{use}})( ((char*)data) + {{offset}} ) ;
 }
@@ -87,8 +88,8 @@ static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
     return {{offset}} + {{width}};
 }
-{{/fixed_getter_sets}}
 
+{{/fixed_getter_sets}}
 {{#first_repeated_getter}}
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data, uint32_t index ) {
     size_t   message_length = {{message}}_length( data ) ;
@@ -175,7 +176,6 @@ static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
 
 {{/first_tagged_getter}}
 {{#first_var_getter}}
-
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] );
 }
@@ -301,18 +301,24 @@ static inline size_t build_{{message}} ( char* data, size_t length, struct {{mes
 {{#has_composite}}
     size_t wrote ;
 {{/has_composite}}
+
     size_t current_offset = {{width}} ;
+
     if ( length < {{width}} )
         return 0 ;
+
 {{#set_field_composite_fixed}}
     build_{{typeName}}( data + {{offset}},  length - {{offset}}, builder_data->{{field}} ) ;
 {{/set_field_composite_fixed}}
-{{#set_field_fixed}}    memcpy( data + {{offset}}, (char*){{take}}builder_data->{{field}}, {{width}} ) ;{{/set_field_fixed}}
+{{#set_field_fixed}}    memcpy( data + {{offset}}, (char*){{take}}builder_data->{{field}}, {{width}} ) ;
+{{/set_field_fixed}}
 {{#set_end}}
     ((uint32_t*)data)[ {{index}} ] = current_offset ;
 {{/set_end}}
+
     return current_offset;
 }
+
 {{/type_function_sets}}
 
 static inline size_t build_TaggedField ( char* data, size_t length, struct TaggedField_builder* builder_data ) {

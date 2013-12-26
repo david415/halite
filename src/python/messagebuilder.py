@@ -10,6 +10,7 @@ import argparse
 
 # internal imports
 from printc  import printC
+from printc2 import printC2
 from printjs import printJS
 
 
@@ -450,29 +451,42 @@ def debugPrint ( typeDb ) :
                 print "    field %s\tof type %s\tis repeated %s" % \
                       ( field.getName(), field.getType().getName(), field.isRepeated() )
 
-def main():
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-s','--schema-files', dest='schema_files', nargs='+', help="protocol message schema in JSON")
-    parser.add_argument('-m','--mustache-file', dest='mustache', help="Mustache template file for our protocol message builder")
-    parser.add_argument('-o','--output-lang', dest='output', help="output language")
-    args = parser.parse_args()
+USAGE = """
+%s {c,js} message-type1.json [ message-type2.json ... ]
+"""
+
+def main ( args ) :
+
+    if len( args ) < 3 :
+        error( USAGE % ( args[ 0 ], ) )
 
     initBuiltInTypes( )
-    buildDataTypes( args.schema_files )
+    output = args[ 1 ]
+    paths  = args[ 2: ]
 
-    for typeObj in typeDb.values():
+    buildDataTypes( paths )
+
+    for typeObj in typeDb.values( ) :
         typeObj.compute( )
 
-    #debugPrint( typeDb )
-    if args.output == "c":
-        printC( typeDb, args.mustache )
+    if output == 'c1' :
+        printC( typeDb )
 
-    elif args.output == "js":
+    elif output == 'c' :
+        cwd = os.path.dirname( args[ 0 ] )
+        template = os.path.join( cwd, 'halite-c.mustache' )
+        printC2( typeDb, template )
+        
+    elif output == 'js':
         printJS( typeDb )
 
+    elif output == 'debug':
+        debugPrint( typeDb )
+
+
     else:
-        error( "unknown ouput type %r" % ( args.ouput, ) )
+        error( "unknown ouput type %r" % ( ouput, ) )
 
 if __name__ == '__main__':
-    main()
+    main( sys.argv )
