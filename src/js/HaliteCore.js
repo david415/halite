@@ -169,13 +169,15 @@ function HaliteCore ( fNacl ) {
   }
 
 
-  function haliteInit ( maxChannels, maxKeyLife ) {
+  function haliteInit ( maxChannels, maxKeyLife, identidyKeyPair ) {
     var result = {
-      maxChannels  : maxChannels ,
-      maxKeyLife   : maxKeyLife ,
-      rotationAge  : maxKeyLife / 2 ,
-      channels     : { } ,
-      channelCount : 0 ,
+      identidyPublic  : identidyKeyPair.boxPk ,
+      identidyPrivate : identidyKeyPair.boxSk ,
+      maxChannels     : maxChannels ,
+      maxKeyLife      : maxKeyLife ,
+      rotationAge     : maxKeyLife / 2 ,
+      channels        : { } ,
+      channelCount    : 0 ,
     } ;
 
     return result ;
@@ -394,6 +396,8 @@ function HaliteCore ( fNacl ) {
   function receiveEnvlope ( manager, currentTime, resultStruct, envlopeBytes ) {
     var result ;
 
+    clearResultStruct( resultStruct ) ;
+
     var typeByte = envlopeBytes[ 0 ] ;
 
     var envlopeView = new DataView (
@@ -435,12 +439,14 @@ function HaliteCore ( fNacl ) {
     var requestNonce       = messages.RequestKey_read_nonce( requestKeyMessage, 0 ) ;
     var cryptoBox          = messages.RequestKey_read_cryptoBox( requestKeyMessage, 0 ) ;
 
-    var boxKey = fNacl.crypto_box_precompute( clientEphermalPKey, fIdentityKeyPair.boxSk ) ;
+    var boxKey = fNacl.crypto_box_precompute( clientEphermalPKey, manager.identidyPrivate ) ;
 
     // BUG: I think this thorows a execption if open fails but it should be checked?
     var unBoxed = fNacl.crypto_box_open_precomputed( cryptoBox, requestNonce, boxKey ) ;
 
-    REQUEST_KEY_RESPONSE_BOXED_DATA_BUILDER.serverEKey = fEphermalKeyPair.boxPk ;
+    manager.ephermalKeyOutstanding++ ;
+
+    REQUEST_KEY_RESPONSE_BOXED_DATA_BUILDER.serverEKey = manager.ephermalKeyPair.boxPk ;
     
     var toBox = messages.make_RequestKeyResponseBoxedData( REQUEST_KEY_RESPONSE_BOXED_DATA_BUILDER ) ;
     var nonce = nacl.crypto_box_random_nonce() ;
@@ -449,7 +455,6 @@ function HaliteCore ( fNacl ) {
     REQUEST_KEY_RESPONSE_BUILDER.clientEKey = clientEphermalPKey ;
     REQUEST_KEY_RESPONSE_BUILDER.nonce      = nonce ;
     REQUEST_KEY_RESPONSE_BUILDER.cryptoBox  = boxed ;
-    
 
     var messageLength = compute_RequestKeyResponse_length( REQUEST_KEY_RESPONSE_BUILDER ) ;
     var messageBuffer = new ArrayBuffer ( messageLength + 1 ) ;
@@ -464,7 +469,6 @@ function HaliteCore ( fNacl ) {
 
     resultStruct.channelState    = STATE_CLOSED ;
     resultStruct.responseMessage = new Uint8Array ( messageBuffer ) ;
-
 
     return SUCESS ;
   }
