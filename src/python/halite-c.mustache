@@ -11,30 +11,28 @@ static inline size_t build_TaggedField ( char* data, size_t length, struct Tagge
 
 size_t static inline compute_TaggedField_length ( struct TaggedField_builder* builder ) ;
 
-{{#composite_typedef}}
-typedef struct {{name}}_ {} {{name}} ;
-static const uint64_t {{name}}_tag = 0x{{tag}} ;
-{{/composite_typedef}}
+{{#types}}
+typedef struct {{message}}_ {} {{message}} ;
+static const uint64_t {{message}}_tag = 0x{{tag}} ;
+{{/types}}
 
-{{#composite_struct_def}}
-struct {{name}}_builder ;
-{{/composite_struct_def}}
+{{#types}}
+struct {{message}}_builder ;
+{{/types}}
 
-{{#composite_builder_structs}}
-{{#structs}}
-struct {{name}}_builder { {{#struct_fields}}{{#is_composite}}
+{{#types}}
+struct {{message}}_builder { {{#fields}}{{#is_composite}}
   struct {{typeName}}_builder*{{array}} {{field}} ;{{/is_composite}}{{^is_composite}}
-  {{type}} {{array}}{{field}} ;{{/is_composite}}{{#has_length}}
-  size_t {{field}}_length ;{{/has_length}}{{/struct_fields}}
+  {{type}} {{array}}{{field}} ;{{/is_composite}}{{^is_fixed}}
+  size_t {{field}}_length ;{{/is_fixed}}{{/fields}}
 } ;
 
-static inline size_t build_{{setter_sig_name}} ( char* data, size_t length, struct {{setter_sig_name}}_builder* builder_data ) ;
+static inline size_t build_{{message}} ( char* data, size_t length, struct {{message}}_builder* builder_data ) ;
 
-size_t static inline compute_{{setter_sig_name}}_length ( struct {{setter_sig_name}}_builder* builder ) ;
+size_t static inline compute_{{message}}_length ( struct {{message}}_builder* builder ) ;
 
-{{/structs}}
-{{/composite_builder_structs}}
-{{#type_function_sets}}
+{{/types}}
+{{#types}}
 
 /***** type {{message}} *****/
 
@@ -56,7 +54,7 @@ size_t static inline {{message}}_length ( {{message}}* data ) {
 size_t static inline compute_{{message}}_length ( struct {{message}}_builder* builder ) {
 
     size_t length = {{width}} ;
-{{#field_lengths}}
+{{#fields}}
 {{#is_repeated}}
     size_t {{message}}_length = builder->{{message}}_length ;
 
@@ -65,18 +63,15 @@ size_t static inline compute_{{message}}_length ( struct {{message}}_builder* bu
             length += compute_{{type}}_length( builder->{{message}}[i] ) ;
     }
 {{/is_repeated}}
-{{#is_composite}}
-    if ( builder->{{message}} != NULL ) length += compute_{{message}}_length( builder->{{message}} ) ;
-{{/is_composite}}
-{{#default}}
-    length += builder->{{message}}_length ; 
-{{/default}}
-{{/field_lengths}}
-    return length;
+{{#is_composite}}{{^is_fixed}}
+    if ( builder->{{message}} != NULL ) length += compute_{{typeName}}_length( builder->{{field}} ) ;
+{{/is_fixed}}{{/is_composite}}
+{{#is_plane}}{{^is_fixed}}    length += builder->{{field}}_length ; 
+{{/is_fixed}}{{/is_plane}}
+{{/fields}}    return length;
 }
 {{/is_fixed}}
-
-{{#fixed_getter_sets}}
+{{#fields}}{{#is_fixed}}
 static inline {{type}} {{message}}_read_{{field}} ( {{message}}* data ) {
     return ({{use}}{{type}}{{use}})( ((char*)data) + {{offset}} ) ;
 }
@@ -88,9 +83,7 @@ static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
     return {{offset}} + {{width}};
 }
-
-{{/fixed_getter_sets}}
-{{#first_repeated_getter}}
+{{/is_fixed}}{{/fields}}{{#fields}}{{#is_first}}{{#is_repeated}}
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data, uint32_t index ) {
     size_t   message_length = {{message}}_length( data ) ;
     uint32_t count          = *(uint32_t*)( ((char*)data) + {{offset}} ) ;
@@ -147,8 +140,7 @@ static inline size_t {{message}}_length_{{field}} ( {{message}}* data, uint32_t 
 
     return field_end - field_start ;
 }
-{{/first_repeated_getter}}
-{{#first_tagged_getter}}
+{{/is_repeated}}{{/is_first}}{{/fields}}{{#fields}}{{#is_first}}{{#is_tagged}}
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] );
 }
@@ -174,8 +166,7 @@ static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] - {{offset}} );
 }
 
-{{/first_tagged_getter}}
-{{#first_var_getter}}
+{{/is_tagged}}{{/is_first}}{{/fields}}{{#fields}}{{#is_first}}{{^is_fixed}}
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] );
 }
@@ -194,8 +185,8 @@ static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] - {{offset}} );
 }
 
-{{/first_var_getter}}
-{{#repeated_getter}}
+{{/is_fixed}}{{/is_first}}{{/fields}}
+{{#fields}}{{^is_first}}{{#is_repeated}}
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data, uint32_t index ) {
     size_t   message_length = {{message}}_length( data ) ;
     uint32_t field_start    = ((uint32_t*)data)[ {{index}} + 1 ] ;
@@ -255,8 +246,8 @@ static inline size_t {{message}}_length_{{field}} ( {{message}}* data, uint32_t 
 
     return field_end - field_start ;
 }
-{{/repeated_getter}}
-{{#tagged_getter}}
+{{/is_repeated}}{{/is_first}}{{/fields}}
+{{#fields}}{{^is_first}}{{#is_tagged}}
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] );
 }
@@ -278,8 +269,8 @@ static inline uint64_t {{message}}_readTag_{{field}} ( {{message}}* data ) {
 static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] - ((uint32_t*)data)[ {{index}} + 1 ] );
 }
-{{/tagged_getter}}
-{{#var_getter}}
+{{/is_tagged}}{{/is_first}}{{/fields}}
+{{#fields}}{{^is_first}}{{^is_fixed}}
 static inline size_t {{message}}_end_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] );
 }
@@ -296,7 +287,8 @@ static inline {{type}} {{message}}_read_{{field}} ( {{message}}* data ) {
 
 static inline size_t {{message}}_length_{{field}} ( {{message}}* data ) {
     return (size_t)( ((uint32_t*)data)[ {{index}} ] - ((uint32_t*)data)[ {{index}} + 1 ] );
-}{{/var_getter}}
+}{{/is_fixed}}{{/is_first}}{{/fields}}
+
 static inline size_t build_{{message}} ( char* data, size_t length, struct {{message}}_builder* builder_data ) {
 {{#has_composite}}
     size_t wrote ;
@@ -307,19 +299,30 @@ static inline size_t build_{{message}} ( char* data, size_t length, struct {{mes
     if ( length < {{width}} )
         return 0 ;
 
-{{#set_field_composite_fixed}}
-    build_{{typeName}}( data + {{offset}},  length - {{offset}}, builder_data->{{field}} ) ;
-{{/set_field_composite_fixed}}
-{{#set_field_fixed}}    memcpy( data + {{offset}}, (char*){{take}}builder_data->{{field}}, {{width}} ) ;
-{{/set_field_fixed}}
-{{#set_end}}
+{{#fields}}{{#is_fixed}}{{^is_composite}}    memcpy( data + {{offset}}, (char*){{take}}builder_data->{{field}}, {{width}} ) ;
+{{/is_composite}}{{/is_fixed}}{{/fields}}
+
+{{#fields}}{{#is_fixed}}{{#is_composite}}    build_{{typeName}}( data + {{offset}},  length - {{offset}}, builder_data->{{field}} ) ;
+{{/is_composite}}{{/is_fixed}}{{/fields}}
+
+
+{{#fields}}{{^is_fixed}}
+    if ( length < current_offset + builder_data->{{field}}_length )
+        return 0 ;
+
+{{#is_composite}}    build_{{typeName}}( data + {{offset}},  length - {{offset}}, builder_data->{{field}} ) ;
+{{/is_composite}}
+{{^is_composite}}    memcpy( data + current_offset, (char*)builder_data->{{field}}, builder_data->{{field}}_length ) ;
+    current_offset += builder_data->{{field}}_length ;
+{{/is_composite}}
+
     ((uint32_t*)data)[ {{index}} ] = current_offset ;
-{{/set_end}}
+{{/is_fixed}}{{/fields}}
 
     return current_offset;
 }
 
-{{/type_function_sets}}
+{{/types}}
 
 static inline size_t build_TaggedField ( char* data, size_t length, struct TaggedField_builder* builder_data ) {
 
