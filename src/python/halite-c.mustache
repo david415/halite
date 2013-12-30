@@ -334,12 +334,12 @@ static inline size_t build_TaggedField ( char* data, size_t length, struct Tagge
     memcpy( data, (char*)&builder_data->tag, sizeof( uint64_t ) ) ;
 
     switch( builder_data->tag ) {
-{{#tagged_field_builder_types}}
+{{#types}}
 
        case 0x{{tag}} :
-           wrote = build_{{type}}( data + sizeof( uint64_t ),  length - sizeof( uint64_t ), (struct {{type}}_builder*)builder_data->data ) ;
+           wrote = build_{{message}}( data + sizeof( uint64_t ),  length - sizeof( uint64_t ), (struct {{message}}_builder*)builder_data->data ) ;
            break ;
-{{/tagged_field_builder_types}}
+{{/types}}
 
        default:
            wrote = 0 ;
@@ -357,12 +357,12 @@ size_t static inline compute_TaggedField_length ( struct TaggedField_builder* bu
     size_t length ;
 
     switch( builder_data->tag ) {
-{{#tagged_field_computer_types}}
+{{#types}}
 
        case 0x{{tag}} :
-           length = compute_{{type}}_length( (struct {{type}}_builder*)builder_data->data ) ;
+           length = compute_{{message}}_length( (struct {{message}}_builder*)builder_data->data ) ;
            break ;
-{{/tagged_field_computer_types}}
+{{/types}}
        default:
            length = 0 ;
            break ;
