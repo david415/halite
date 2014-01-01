@@ -1,9 +1,17 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
+# external imports
 import sys
 import json
 import binascii
 import sha
+import os
+import argparse
+
+# internal imports
+from printc  import printC
+from printc2 import printC2
+from printjs import printJS
 
 
 VERSION_KEY = "version"
@@ -16,8 +24,6 @@ TYPE_TWO = 2
 
 OFFSET_SIZE = 4
 
-
-
 typeDb = {}
 
 
@@ -27,7 +33,7 @@ class DataType ( object ) :
         raise NotImplementedError ( )
 
 
-    def isComposit ( self ) :
+    def isComposite ( self ) :
         return False
 
 
@@ -140,7 +146,7 @@ class SimpeFixedDataType ( DataType ) :
 
 
 
-class ComposetDataType ( DataType ) :
+class CompositeDataType ( DataType ) :
 
     def __init__ ( self, name ) :
         self._name          = name
@@ -160,7 +166,7 @@ class ComposetDataType ( DataType ) :
         return self._name
 
 
-    def isComposit ( self ) :
+    def isComposite ( self ) :
         return True
 
 
@@ -247,7 +253,7 @@ class DataField ( object ) :
             self._type = typeDb[ typeName ]
 
         else :
-            self._type = ComposetDataType ( typeName )
+            self._type = CompositeDataType ( typeName )
             typeDb[ typeName ] = self._type
 
 
@@ -274,8 +280,8 @@ class DataField ( object ) :
         return self._type.getFixedWidth( )
 
 
-    def isComposit ( self ) :
-        return self._type.isComposit( )
+    def isComposite ( self ) :
+        return self._type.isComposite( )
 
 def buildField ( messageField ) :
     
@@ -332,7 +338,7 @@ def buildType ( messageType ) :
             error( "Unexpected key %r" % key )
 
     if typeName is None:
-        error( "Type hans not name %r" % messageType )
+        error( "Type has no name %r" % messageType )
 
     if dataTag is  None :
         nameHash = sha.new( typeName ).digest() ; 
@@ -348,7 +354,7 @@ def buildType ( messageType ) :
         typeObject = typeDb[ typeName ]
 
     else:
-        typeObject = ComposetDataType ( typeName )
+        typeObject = CompositeDataType ( typeName )
 
         typeDb[ typeName ] = typeObject
 
@@ -382,7 +388,7 @@ def buildDataTypes ( file_path_list ) :
         messages = json.load( fd )
 
         if not isinstance( messages, list ):
-            error( "root of scheem must be list" )
+            error( "root of schema must be list" )
 
         for message in messages:
             # str is comment
@@ -437,17 +443,14 @@ def debugPrint ( typeDb ) :
         if info.isFixed( ) == True :
             print "  is fixed width width %d" % ( info.getFixedWidth(), )
 
-        if info.isComposit( ) :
-            print "  is composet, has %d fixed, %d var" % \
+        if info.isComposite( ) :
+            print "  is composite, has %d fixed, %d var" % \
                   ( len( info.getFixed() ), len( info.getVar() ) )
 
             for field in info.getFields( ) :
                 print "    field %s\tof type %s\tis repeated %s" % \
                       ( field.getName(), field.getType().getName(), field.isRepeated() )
 
-from printc  import printC
-from printjs import printJS
-import os
 
 USAGE = """
 %s {c,js} message-type1.json [ message-type2.json ... ]
@@ -467,14 +470,23 @@ def main ( args ) :
     for typeObj in typeDb.values( ) :
         typeObj.compute( )
 
-    #debugPrint( typeDb )
-    if output == "c":
+    if output == 'c1' :
         printC( typeDb )
 
-    elif output == "js":
+    elif output == 'c' :
+        cwd = os.path.dirname( args[ 0 ] )
+        template = os.path.join( cwd, 'halite-c.mustache' )
+        printC2( typeDb, template )
+        
+    elif output == 'js':
         printJS( typeDb )
+
+    elif output == 'debug':
+        debugPrint( typeDb )
+
 
     else:
         error( "unknown ouput type %r" % ( ouput, ) )
 
-main( sys.argv )
+if __name__ == '__main__':
+    main( sys.argv )

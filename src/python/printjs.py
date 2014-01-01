@@ -8,7 +8,7 @@ self.%(message)s_read_%(field)s = function ( data, offset ) {
 } ;
 """
 
-FIXED_COMPOSIT_GETTER = """
+FIXED_COMPOSITE_GETTER = """
 self.%(message)s_read_%(field)s = function ( data, offset ) {
     var start = offset + %(offset)d ;
 
@@ -80,7 +80,7 @@ self.%(message)s_readTag_%(field)s = function ( data, offset ) {
 } ;
 """
 
-FIRST_VAR_COMPOSIT_GETTER = """
+FIRST_VAR_COMPOSITE_GETTER = """
 self.%(message)s_read_%(field)s = function ( data, offset ) {
     var start = offset + %(offset)d ; 
     var end   = offset + data.getUint32( offset + ( %(index)d     ) * 4, true ) ;
@@ -154,7 +154,7 @@ self.%(message)s_count_%(field)s = function ( data, offset ) {
 
 """
 
-VAR_COMPOSIT_GETTER = """
+VAR_COMPOSITE_GETTER = """
 self.%(message)s_read_%(field)s = function ( data, offset ) {
     var start = offset + data.getUint32( offset + ( %(index)d + 1 ) * 4, true ) ;
     var end   = offset + data.getUint32( offset + ( %(index)d     ) * 4, true ) ;
@@ -234,7 +234,7 @@ SET_FIELD_VAR = """
     current_offset += convexstruct.types.%(typeName)s.write( data, offset + current_offset, builder_data.%(field)s ) ;
 """
 
-SET_FIELD_COMPOSIT_FIXED = """
+SET_FIELD_COMPOSITE_FIXED = """
     var fieldData  = builder_data.%(field)s ;
     var writeStart = offset + %(offset)d ;
 
@@ -291,7 +291,7 @@ SET_FIELD_REPETED = """
     }
 """
 
-SET_FIELD_COMPOSIT_VAR = """
+SET_FIELD_COMPOSITE_VAR = """
     if ( builder_data.%(field)s != undefined ) {
 
         var fieldData  = builder_data.%(field)s ;
@@ -397,7 +397,7 @@ self.%(message)s_length = function ( data, offset ) {
 } ;
 """
 
-REGISTER_COMPOSIT = """
+REGISTER_COMPOSITE = """
 self.%(name)s_tag = '%(tag)s' ;
 convexstruct.registry.register( '%(tag)s', self.build_%(name)s, self.compute_%(name)s_length ) ;
 """
@@ -451,9 +451,9 @@ def printJS ( typeDb ) :
 
     for name, info in typeDb.items() :
 
-        if info.isComposit( ) :
+        if info.isComposite( ) :
 
-            hasComposit = False
+            hasComposite = False
 
             print "/***** type %s *****/" % ( info.getName(), )
 
@@ -461,8 +461,8 @@ def printJS ( typeDb ) :
             currentOffset = OFFSET_SIZE * len( info.getVar( ) )
 
             for field in info.getFixed( ) :
-                if field.isComposit() == True:
-                    printFieldFormat( name, currentOffset, field, varIndex, FIXED_COMPOSIT_GETTER )
+                if field.isComposite() == True:
+                    printFieldFormat( name, currentOffset, field, varIndex, FIXED_COMPOSITE_GETTER )
                 else:
                     printFieldFormat( name, currentOffset, field, varIndex, FIXED_GETTER )
 
@@ -478,8 +478,8 @@ def printJS ( typeDb ) :
                 if field.isRepeated() == True:
                     printFieldFormat( name, currentOffset, field, varIndex, FIRST_REPETED_GETTER )
                     
-                elif field.isComposit() == True:
-                    printFieldFormat( name, currentOffset, field, varIndex, FIRST_VAR_COMPOSIT_GETTER )
+                elif field.isComposite() == True:
+                    printFieldFormat( name, currentOffset, field, varIndex, FIRST_VAR_COMPOSITE_GETTER )
 
                 elif field.getType().isDynamic() :
                     printFieldFormat( name, currentOffset, field, varIndex, FIRST_TAGGED_GETTER )
@@ -497,8 +497,8 @@ def printJS ( typeDb ) :
                 if field.isRepeated() == True:
                     printFieldFormat( name, currentOffset, field, varIndex, REPETED_GETTER )
 
-                elif field.isComposit() == True:
-                    printFieldFormat( name, currentOffset, field, varIndex, VAR_COMPOSIT_GETTER )
+                elif field.isComposite() == True:
+                    printFieldFormat( name, currentOffset, field, varIndex, VAR_COMPOSITE_GETTER )
 
                 elif field.getType().isDynamic() :
                     printFieldFormat( name, currentOffset, field, varIndex, TAGGED_GETTER )
@@ -514,12 +514,12 @@ def printJS ( typeDb ) :
             currentOffset = OFFSET_SIZE * len( varFields )
 
             for field in varFields :
-                if field.isComposit() == True or field.getType( ).isDynamic( ):
-                    hasComposit = True
+                if field.isComposite() == True or field.getType( ).isDynamic( ):
+                    hasComposite = True
                     
             print SETTER_START % { "message" : name }
 
-            if ( hasComposit == True ) :
+            if ( hasComposite == True ) :
                 print "    var wrote ;"
 
             print "    var current_offset = %d ;" % ( info.getFixedWidth( ), )
@@ -528,8 +528,8 @@ def printJS ( typeDb ) :
             print FIXED_LENGTH_CHECK % ( info.getFixedWidth( ), )
     
             for field in info.getFixed( ) :
-                if field.isComposit( ):
-                    printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_COMPOSIT_FIXED )
+                if field.isComposite( ):
+                    printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_COMPOSITE_FIXED )
 
                 else :
                     printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_FIXED )
@@ -544,8 +544,8 @@ def printJS ( typeDb ) :
                     if field.isRepeated( ):
                         printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_REPETED )
 
-                    elif field.isComposit( ):
-                        printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_COMPOSIT_VAR )
+                    elif field.isComposite( ):
+                        printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_COMPOSITE_VAR )
 
                     elif field.getType( ).isDynamic( ) :
                         printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_TAGGED )
@@ -577,7 +577,7 @@ def printJS ( typeDb ) :
                     if field.isRepeated( ):
                         print COMPUTE_REPETED_LENGTH % \
                               { "name" : field.getName( ), "typeName" : field.getType( ).getName( ) }
-                    elif field.isComposit( ):
+                    elif field.isComposite( ):
                         print "    if ( builder.%s != undefined ) length += self.compute_%s_length( builder.%s ) ;" % \
                               ( field.getName( ), field.getType( ).getName( ), field.getName( ) )
 
@@ -590,6 +590,6 @@ def printJS ( typeDb ) :
 
                 print "    return length;\n} ;"
 
-            print  REGISTER_COMPOSIT % { "name" : name, "tag" : info.getTag( ) }
+            print  REGISTER_COMPOSITE % { "name" : name, "tag" : info.getTag( ) }
         
     print FOOTER

@@ -13,9 +13,7 @@ static inline size_t %(message)s_length_%(field)s ( %(message)s* data ) {
 
 static inline size_t %(message)s_end_%(field)s ( %(message)s* data ) {
     return %(offset)d + %(width)d;
-}
-
-""" 
+}""" 
 
 FIRST_VAR_GETTER = """
 static inline size_t %(message)s_end_%(field)s ( %(message)s* data ) {
@@ -505,7 +503,7 @@ def printC ( typeDb ) :
     # check for type error for the user.
     for name, info in typeDb.items() :
 
-        if info.isComposit( ) :
+        if info.isComposite( ) :
             print "typedef struct %s_ {} %s ;" % ( name, name )
             print "static const uint64_t %s_tag = 0x%s ;" % ( name, info.getTag( ) )
 
@@ -513,16 +511,16 @@ def printC ( typeDb ) :
     print ""
 
     for name, info in typeDb.items() :
-        if info.isComposit( ) :
+        if info.isComposite( ) :
             print "struct %s_builder ;" % ( name, )
 
     print ""
     
     for name, info in typeDb.items() :
 
-        if info.isComposit( ) :
+        if info.isComposite( ) :
 
-            print "struct %s_builder {" % ( name, )
+            print "struct %s_builder { " % ( name, )
 
             varIndex      = len( info.getVar( ) ) - 1
             currentOffset = OFFSET_SIZE * len( info.getVar( ) )
@@ -538,7 +536,7 @@ def printC ( typeDb ) :
                 
                 updateFromField( keys, field )
 
-                if field.isComposit() or field.getType( ).isDynamic( ):
+                if field.isComposite() or field.getType( ).isDynamic( ):
                     print "  struct %(typeName)s_builder*%(array)s %(field)s ;" % keys
 
                 else :
@@ -546,7 +544,7 @@ def printC ( typeDb ) :
                     
                 if ( not field.isFixed() ) and (
                     not (
-                        ( field.isComposit() and not field.isRepeated() ) \
+                        ( field.isComposite() and not field.isRepeated() ) \
                         or field.getType().isDynamic( ) \
                         )) :
                     print "  size_t %(field)s_length ;" % keys
@@ -558,11 +556,11 @@ def printC ( typeDb ) :
 
     for name, info in typeDb.items() :
 
-        if info.isComposit( ) :
+        if info.isComposite( ) :
 
             hasComposit = False
 
-            print "/***** type %s *****/" % ( info.getName(), )
+            print "\n/***** type %s *****/" % ( info.getName(), )
 
             varFields = info.getVar( )
 
@@ -582,7 +580,7 @@ def printC ( typeDb ) :
                     if field.isRepeated() :
                         print COMPUTE_REPETED_LENGTH % \
                               { 'fieldName' : field.getName( ), 'fieldType' : field.getType( ).getName( ) }                        
-                    elif field.isComposit( ) or field.getType( ).isDynamic( ) :
+                    elif field.isComposite( ) or field.getType( ).isDynamic( ) :
                         print "    if ( builder->%s != NULL ) length += compute_%s_length( builder->%s ) ;" % \
                               ( field.getName( ), field.getType( ).getName( ), field.getName( ) )
                     else :
@@ -626,7 +624,7 @@ def printC ( typeDb ) :
             currentOffset = OFFSET_SIZE * len( varFields )
 
             for field in varFields :
-                if field.isComposit() == True or field.getType( ).isDynamic() == True :
+                if field.isComposite() == True or field.getType( ).isDynamic() == True :
                     hasComposit = True #BOOG do I need this for repeted?
                     
             print SETTER_SIG % { "message" : name, "end" : "{" }
@@ -640,7 +638,7 @@ def printC ( typeDb ) :
             print FIXED_LENGTH_CHECK % ( info.getFixedWidth( ), )
     
             for field in info.getFixed( ) :
-                if field.isComposit( ):
+                if field.isComposite( ):
                     currentOffset = printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_COMPOSIT_FIXED )
                 else:
                     currentOffset = printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_FIXED )
@@ -653,7 +651,7 @@ def printC ( typeDb ) :
                     if field.isRepeated( ) :
                         printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_REPETED_VAR )
 
-                    elif field.isComposit( ) or field.getType().isDynamic( ):
+                    elif field.isComposite( ) or field.getType().isDynamic( ):
                         printFieldFormat( name, currentOffset, field, varIndex, SET_FIELD_COMPOSIT_VAR )
 
                     else :
@@ -672,7 +670,7 @@ def printC ( typeDb ) :
     
     for name, info in typeDb.items() :
 
-        if info.isComposit( ) :
+        if info.isComposite( ) :
             print TAGGED_FILED_BUILDER_TYPE % \
                   { 'tag' : info.getTag() , 'type' : info.getName() }
 
@@ -684,7 +682,7 @@ def printC ( typeDb ) :
     
     for name, info in typeDb.items() :
 
-        if info.isComposit( ) :
+        if info.isComposite( ) :
             print TAGGED_FILED_COMPUTER_TYPE % \
                   { 'tag' : info.getTag() , 'type' : info.getName() }
 

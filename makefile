@@ -22,6 +22,7 @@ messages : ${MESSAGE_HEADDERS} ${MESSAGE_JS}
 
 
 ${MESSAGE_HEADDERS} : ${MESSAGE_HEADDERS_DIR}
+	python src/python/messagebuilder.py c1 ${MESSAGE_JSON} > ${MESSAGE_HEADDERS_DIR}/${MESSAGE_HEADDERS}1
 	python src/python/messagebuilder.py c ${MESSAGE_JSON} > ${MESSAGE_HEADDERS_DIR}/${MESSAGE_HEADDERS}
 
 ${MESSAGE_JS} : ${MESSAGE_JS_DIR}
