@@ -31,8 +31,7 @@
        ]
  
   SessionMessage
-    - R'
-    - counter
+    - S'
     - Box( R', S' )[ 
       - session flags 4 bytes: 1b CloseSession, 10b CloseChannel
       - user bytes

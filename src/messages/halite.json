@@ -60,7 +60,6 @@
     "version" : 2 ,
     "fields" : [
     { "name" : "senderEKey" , "type" : "bit256" },
-    { "name" : "counter"    , "type" : "bit192" },
     { "name" : "cryptoBox"  , "type" : "bytes"  }
   ] },
 
