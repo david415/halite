@@ -4,7 +4,7 @@
 import sys
 import json
 import binascii
-import sha
+import hashlib
 import os
 import argparse
 
